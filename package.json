@@ -1,0 +1,22 @@
+{
+  "name": "game-vengeancereborn",
+  "version": "1.0.0",
+  "description": "Jogo de plataforma 2D com elementos de roguelite, desenvolvido em Python\r com **Pygame-ce**, baseado no documento de escopo do projeto (equipe\r GeniusVerse).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "docusaurus start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/enzosantos081-tech/game-VengeanceReborn.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/enzosantos081-tech/game-VengeanceReborn/issues"
+  },
+  "homepage": "https://github.com/enzosantos081-tech/game-VengeanceReborn#readme"
+}
