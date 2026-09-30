@@ -6,7 +6,7 @@ const rules = [
   {
     number: '01',
     title: 'Sobreviva à jornada',
-    text: 'Você começa cada região com três vidas. Encostar em armadilhas ou receber um golpe inimigo custa uma vida; ao perder todas, a jornada termina.',
+    text: 'Você começa cada região full life. Encostar em armadilhas ou receber um golpe inimigo custa uma vida; ao perder todas, a jornada termina.',
   },
   {
     number: '02',
