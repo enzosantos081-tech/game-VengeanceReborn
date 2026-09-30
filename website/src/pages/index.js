@@ -8,19 +8,23 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
       <div className="container">
         <Heading as="h1" className="hero__title">
-          {siteConfig.title}
+          Vengeance Reborn
         </Heading>
-        <p className="hero__subtitle">{siteConfig.tagline}</p>
+        <p className="hero__subtitle">A fast-paced action game with intense combat and deep storytelling.</p>
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
             to="/docs/intro">
-            Docusaurus Tutorial - 5min ⏱️
+            Game Tutorial - 5min ⏱️
+          </Link>
+          <Link
+            className="button button--outline button--secondary button--lg"
+            to="/regras">
+            Regras do jogo
           </Link>
         </div>
       </div>
