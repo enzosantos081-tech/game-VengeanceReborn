@@ -2,7 +2,8 @@
   min-height: calc(100vh - 60px);
   padding: 4rem 0 5rem;
   background:
-    linear-gradient(115deg, rgba(44, 91, 71, 0.07), transparent 42%),
+    linear-gradient(115deg, rgba(48, 82, 130, 0.11), transparent 44%),
+    linear-gradient(285deg, rgba(135, 42, 46, 0.08), transparent 42%),
     var(--ifm-background-color);
 }
 

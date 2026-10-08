@@ -1,6 +1,5 @@
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import HomepageFeatures from '@site/src/components/HomepageFeatures';
 
@@ -10,21 +9,18 @@ import styles from './index.module.css';
 function HomepageHeader() {
   return (
     <header className={clsx('hero hero--primary', styles.heroBanner)}>
-      <div className="container">
-        <Heading as="h1" className="hero__title">
-          Vengeance Reborn
-        </Heading>
-        <p className="hero__subtitle">A fast-paced action game with intense combat and deep storytelling.</p>
+      <div className={clsx('container', styles.heroContent)}>
+        <p className={styles.heroKicker}>AÇÃO · FANTASIA SOMBRIA · VENGEANCE REBORN</p>
+        <Heading as="h1" className="hero__title">Vengeance Reborn</Heading>
+        <p className={clsx('hero__subtitle', styles.heroSubtitle)}>
+          Atravesse as ruínas, enfrente Vharok e conquiste sua vingança.
+        </p>
         <div className={styles.buttons}>
-          <Link
-            className="button button--secondary button--lg"
-            to="/docs/intro">
-            Game Tutorial - 5min ⏱️
+          <Link className="button button--primary button--lg" to="/docs/intro">
+            Explorar o tutorial
           </Link>
-          <Link
-            className="button button--outline button--secondary button--lg"
-            to="/regras">
-            Regras do jogo
+          <Link className="button button--outline button--secondary button--lg" to="/diagramas-uml">
+            Ver diagramas UML
           </Link>
         </div>
       </div>
@@ -33,11 +29,10 @@ function HomepageHeader() {
 }
 
 export default function Home() {
-  const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from Vengeance Reborn`}
-      description="Description will go into a meta tag in <head />">
+      title="Vengeance Reborn"
+      description="Explore o universo, as regras e a arquitetura de Vengeance Reborn.">
       <HomepageHeader />
       <main>
         <HomepageFeatures />

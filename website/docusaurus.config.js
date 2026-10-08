@@ -10,8 +10,8 @@ import {themes as prismThemes} from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'My Site',
-  tagline: 'Dinosaurs are cool',
+  title: 'Vengeance Reborn',
+  tagline: 'Uma jornada de ação e fantasia sombria.',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -80,13 +80,14 @@ const config = {
       // Replace with your project's social card
       image: 'img/docusaurus-social-card.jpg',
       colorMode: {
-        respectPrefersColorScheme: true,
+        defaultMode: 'dark',
+        respectPrefersColorScheme: false,
       },
       navbar: {
         title: 'Vengeance Reborn',
         logo: {
-          alt: 'My Site Logo',
-          src: 'img/logo.svg',
+          alt: 'Logo de Vengeance Reborn',
+          src: 'img/Logo Vengeance Reborn.png',
         },
         items: [
           {
@@ -96,58 +97,34 @@ const config = {
             label: 'Tutorial',
           },
           {to: '/regras', label: 'Regras', position: 'left'},
+          {to: '/historia', label: 'História', position: 'left'},
           {to: '/diagramas-uml', label: 'Diagramas UML', position: 'left'},
-          {
-            href: 'https://github.com/facebook/docusaurus',
-            label: 'GitHub',
-            position: 'right',
-          },
+          {to: '/blog', label: 'Blog', position: 'right'},
         ],
       },
       footer: {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'Jogo',
             items: [
               {
-                label: 'Tutorial',
+                label: 'Comece a jornada',
                 to: '/docs/intro',
               },
+              {label: 'Regras', to: '/regras'},
+              {label: 'História', to: '/historia'},
             ],
           },
           {
-            title: 'Community',
+            title: 'Documentação',
             items: [
-              {
-                label: 'Stack Overflow',
-                href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-              },
-              {
-                label: 'Discord',
-                href: 'https://discordapp.com/invite/docusaurus',
-              },
-              {
-                label: 'X',
-                href: 'https://x.com/docusaurus',
-              },
-            ],
-          },
-          {
-            title: 'More',
-            items: [
-              {
-                label: 'Blog',
-                to: '/blog',
-              },
-              {
-                label: 'GitHub',
-                href: 'https://github.com/facebook/docusaurus',
-              },
+              {label: 'Diagramas UML', to: '/diagramas-uml'},
+              {label: 'Blog', to: '/blog'},
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+        copyright: `© ${new Date().getFullYear()} Vengeance Reborn.`,
       },
       prism: {
         theme: prismThemes.github,
