@@ -1,0 +1,756 @@
+@startuml VengeanceReborn_Classes
+' =====================================================================
+' Vengeance Reborn - Diagrama de Classes (código completo do zip)
+' Gerado a partir da análise dos arquivos .py (herança, composição,
+' agregação e dependências). Abra no VS Code com a extensão PlantUML
+' (Alt+D para pré-visualizar) - requer Java + Graphviz instalados.
+'
+' Legenda:  <|--  herança      *--  composição     o--  agregação
+'           -->   associação   ..>  dependência (usa / recebe por parâmetro)
+' =====================================================================
+
+title Vengeance Reborn - Diagrama de Classes
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam packageStyle rectangle
+skinparam ClassBackgroundColor #FDFDFD
+skinparam ClassBorderColor #444444
+skinparam ArrowColor #333333
+skinparam DefaultFontSize 12
+skinparam nodesep 40
+skinparam ranksep 60
+
+hide empty members
+
+' ---------------------------------------------------------------------
+' config
+' ---------------------------------------------------------------------
+package "config" #EEEEEE {
+  class settings <<module>> {
+    {static} SCREEN_WIDTH, SCREEN_HEIGHT, FPS
+    {static} GRAVITY, PLAYER_*, DASH_*, WALL_*
+    {static} BASIC_ENEMY_*, RANGED_ENEMY_*, BOSS_*
+    {static} UPGRADE_*, SHOP_*, COLOR_*
+    {static} STATE_MENU, STATE_PLAYING, STATE_PAUSED
+    {static} STATE_SHOP, STATE_GAME_OVER, STATE_VICTORY
+  }
+}
+note right of settings
+  Usado por praticamente todas as classes
+  (setas omitidas para não poluir o diagrama).
+end note
+
+' ---------------------------------------------------------------------
+' core
+' ---------------------------------------------------------------------
+package "core" #E8F0FE {
+  class Game {
+    + screen : Surface
+    + world_surface : Surface
+    + clock : Clock
+    + states : StateMachine
+    + input : InputManager
+    + audio : SoundManager
+    + menu_screen : MenuScreen
+    + hud : HUD
+    + game_over_screen : GameOverScreen
+    + victory_screen : VictoryScreen
+    + shop : Shop
+    + pause_menu : PauseMenu
+    + particles : ParticleSystem
+    + story : StoryPopup
+    + level : Level
+    + player : Player
+    + respawn_system : RespawnSystem
+    + camera_x : int
+    + shake_timer : int
+    + shake_magnitude : float
+    + running : bool
+    - _prev_on_ground : bool
+    - _prev_health : int
+    - _victory_sound_played : bool
+    --
+    + run()
+    + trigger_shake(magnitude, frames)
+    + start_new_game()
+    + enter_boss_level()
+    + restart_attempt()
+    + return_to_menu()
+    - _near_shop() : bool
+    - _update_shake()
+    - _process_events()
+    - _update()
+    - _update_playing()
+    - _update_shop()
+    - _update_pause()
+    - _update_camera()
+    - _draw()
+  }
+
+  class StateMachine {
+    + current : str
+    + previous : str
+    --
+    + change(new_state)
+    + is_(state) : bool
+    + revert()
+  }
+
+  class InputManager {
+    - _held : set
+    - _pressed_this_frame : set
+    - _released_this_frame : set
+    - _mouse_held : set
+    - _mouse_pressed_this_frame : set
+    - _mouse_released_this_frame : set
+    --
+    + handle_event(event)
+    + end_frame()
+    + is_held(key) : bool
+    + is_pressed(key) : bool
+    + is_released(key) : bool
+    + move_left() : bool
+    + move_right() : bool
+    + jump_pressed() : bool
+    + jump_held() : bool
+    + attack_pressed() : bool
+    + mouse_world_x(camera_x) : int
+    + dash_pressed() : bool
+    + interact_pressed() : bool
+    + pause_pressed() : bool
+    + confirm_pressed() : bool
+    + down_pressed() : bool
+    + up_pressed() : bool
+  }
+
+  class save <<module>> {
+    + {static} save_game(player_stats) : bool
+    + {static} load_game(player_stats) : bool
+    + {static} delete_save()
+  }
+
+  class main <<module>> {
+    + {static} main()
+  }
+}
+
+' ---------------------------------------------------------------------
+' player
+' ---------------------------------------------------------------------
+package "player" #E9F7EF {
+  class Player {
+    + rect : Rect
+    + spawn_x : int
+    + spawn_y : int
+    + vel_x : float
+    + vel_y : float
+    + facing_right : bool
+    + attack_facing_right : bool
+    + on_ground : bool
+    + coyote_timer : int
+    + jump_buffer_timer : int
+    + stats : PlayerStats
+    + health : int
+    + attack : PlayerAttack
+    + sprite : SpriteAnimator
+    + invuln_timer : int
+    + alive : bool
+    + knockback_x : float
+    + standing_platform : Platform
+    + dashing : bool
+    + dash_timer : int
+    + dash_charges : int
+    + max_dash_charges : int
+    + dash_recharge_timer : int
+    + dash_dir : int
+    + touching_wall : int
+    + wall_jump_lock_timer : int
+    + air_jumps_remaining : int
+    + just_jumped : bool
+    + just_attacked : bool
+    + just_dashed : bool
+    --
+    + handle_input(input_manager, camera_x)
+    + update(level)
+    + take_damage(amount, knockback_dir)
+    + respawn_at_core(core_x, core_y)
+    + draw(surface, camera_x)
+    - _try_start_dash()
+    - _apply_jump_if_possible()
+    - _start_jump(force)
+    - _start_wall_jump()
+    - _update_sprite_state()
+  }
+
+  class PlayerStats {
+    + max_health : int
+    + attack_damage : int
+    + jump_force : float
+    + attack_cooldown : int
+    + health_level : int
+    + damage_level : int
+    + jump_level : int
+    + attack_speed_level : int
+    + double_jump_level : int
+    + extra_jumps : int
+    + magnet_level : int
+    + dash_charge_level : int
+    + extra_dash_charges : int
+    + coins : int
+    + total_coins_collected : int
+    --
+    + add_coins(amount)
+    + spend_coins(amount) : bool
+    + can_upgrade_health() : bool
+    + can_upgrade_damage() : bool
+    + can_upgrade_jump() : bool
+    + can_upgrade_attack_speed() : bool
+    + can_upgrade_double_jump() : bool
+    + can_upgrade_magnet() : bool
+    + can_upgrade_dash_charge() : bool
+    + upgrade_health() : bool
+    + upgrade_damage() : bool
+    + upgrade_jump() : bool
+    + upgrade_attack_speed() : bool
+    + upgrade_double_jump() : bool
+    + upgrade_magnet() : bool
+    + upgrade_dash_charge() : bool
+    + to_dict() : dict
+    + from_dict(data)
+  }
+
+  class PlayerAttack {
+    + active : bool
+    + timer : int
+    + cooldown_timer : int
+    + hit_enemies_this_swing : set
+    --
+    + try_start(cooldown) : bool
+    + update()
+    + get_hitbox(player_rect, facing_right) : Rect
+    + has_hit(enemy_id) : bool
+    + register_hit(enemy_id)
+  }
+
+  class SpriteAnimator {
+    + state : str
+    + frame_index : int
+    + frame_timer : int
+    --
+    + set_state(state)
+    + update()
+    + get_surface(facing_right) : Surface
+  }
+
+  class player_sprites <<module>> {
+    - {static} _cache : dict
+    - {static} _load_all() : dict
+  }
+}
+
+' ---------------------------------------------------------------------
+' enemies
+' ---------------------------------------------------------------------
+package "enemies" #FDEDEC {
+  class Enemy {
+    + id : int
+    + rect : Rect
+    + spawn_x : int
+    + spawn_y : int
+    + health : int
+    + max_health : int
+    + damage : int
+    + color : tuple
+    + alive : bool
+    + facing_right : bool
+    + vel_x : float
+    + vel_y : float
+    + hit_flash_timer : int
+    + coin_value : int
+    + can_respawn : bool
+    + respawn_timer : int
+    --
+    + take_damage(amount)
+    + respawn()
+    + update(level, player)
+    + check_contact_damage(player)
+    + draw(surface, camera_x)
+    + draw_health_bar(surface, camera_x)
+  }
+
+  class BasicEnemy {
+    + left_bound : int
+    + right_bound : int
+    + direction : int
+    --
+    + respawn()
+    + update(level, player)
+  }
+
+  class RangedEnemy {
+    + cooldown : int
+    + projectiles : list
+    --
+    + respawn()
+    + update(level, player)
+    + draw(surface, camera_x)
+    - _fire(distance)
+    - _update_projectiles(level, player)
+  }
+
+  class FlyingEnemy {
+    + home_x : int
+    + home_y : int
+    + patrol_range : int
+    + bob_amplitude : int
+    + direction : int
+    - _t : float
+    --
+    + update(level, player)
+    + respawn()
+    + draw(surface, camera_x)
+  }
+
+  class WallSentinel {
+    + facing_dir : int
+    + cooldown : int
+    + projectiles : list
+    --
+    + update(level, player)
+    + respawn()
+    + draw(surface, camera_x)
+    - _fire()
+    - _update_projectiles(level, player)
+  }
+
+  class Boss {
+    + {static} STATE_CHASE : str
+    + {static} STATE_TELEGRAPH : str
+    + {static} STATE_ATTACK : str
+    + {static} STATE_RECOVER : str
+    + {static} ATTACK_SLAM : str
+    + {static} ATTACK_BARRAGE : str
+    + arena_left : int
+    + arena_right : int
+    + state : str
+    + attack_type : str
+    + attack_timer : int
+    + telegraph_timer : int
+    + recover_timer : int
+    + attack_rect : Rect
+    + attack_active_timer : int
+    + phase2 : bool
+    + projectiles : list
+    + attack_triggered_this_frame : str
+    --
+    + update(level, player)
+    + take_damage(amount)
+    + is_vulnerable() : bool
+    + draw(surface, camera_x)
+    + draw_boss_bar(surface)
+    - _choose_attack()
+    - _perform_slam(player)
+    - _perform_barrage(player)
+    - _update_projectiles(level, player)
+    - _slam_preview_rect() : Rect
+  }
+}
+
+' ---------------------------------------------------------------------
+' world
+' ---------------------------------------------------------------------
+package "world" #FEF9E7 {
+  class Level {
+    + width : int
+    + height : int
+    + is_boss_level : bool
+    + platforms : PlatformGroup
+    + obstacles : ObstacleGroup
+    + coins : CoinGroup
+    + enemies : List<Enemy>
+    + checkpoints : List<Checkpoint>
+    + shop_zone : ShopZone
+    + boss : Boss
+    + boss_trigger : Rect
+    + core_pos : tuple
+    + player_start : tuple
+    + background_decor : list
+    + story_triggers : list
+    --
+    + add_checkpoint(x, y) : Checkpoint
+    + add_story_trigger(x, text, max_y)
+    + check_story_triggers(player_x, player_y) : str
+    + move_and_collide(player, vel_x, vel_y)
+    + move_and_collide_enemy(enemy, vel_x, vel_y)
+    + has_ground_ahead(rect, direction) : bool
+    + rect_hits_solid(rect) : bool
+    + update_platforms()
+    + update(player, particles) : int
+    + living_enemies() : List<Enemy>
+    + draw_background(surface, camera_x)
+    + draw(surface, camera_x)
+  }
+
+  class level_builders <<module>> {
+    + {static} build_main_level() : Level
+    + {static} build_boss_level() : Level
+    - {static} _add_decor(level, rng, start, end)
+  }
+
+  class Platform {
+    + rect : Rect
+    + is_ground : bool
+    + delta_x : int
+    --
+    + update()
+    + is_solid() : bool
+    + draw(surface, camera_x)
+  }
+
+  class MovingPlatform {
+    + start_x : int
+    + start_y : int
+    + end_x : int
+    + end_y : int
+    + speed : float
+    + progress : float
+    + direction : int
+    + delta_x : int
+    + delta_y : int
+    --
+    + update()
+    + draw(surface, camera_x)
+  }
+
+  class CrumblingPlatform {
+    + {static} STATE_IDLE : str
+    + {static} STATE_SHAKING : str
+    + {static} STATE_GONE : str
+    + state : str
+    + timer : int
+    --
+    + is_solid() : bool
+    + trigger()
+    + update()
+    + draw(surface, camera_x)
+  }
+
+  class PlatformGroup {
+    + platforms : List<Platform>
+    --
+    + add(x, y, width, height, is_ground) : Platform
+    + add_moving(x, y, width, height, offset_x, offset_y, speed) : MovingPlatform
+    + add_crumbling(x, y, width, height) : CrumblingPlatform
+    + update()
+    + rects() : List<Rect>
+    + moving_platforms() : List<MovingPlatform>
+    + crumbling_at(rect) : CrumblingPlatform
+    + draw(surface, camera_x)
+  }
+
+  class Spike {
+    + rect : Rect
+    + facing : str
+    --
+    + check_damage(player)
+    + draw(surface, camera_x)
+  }
+
+  class ObstacleGroup {
+    + spikes : List<Spike>
+    --
+    + add_spike(x, y, width, height) : Spike
+    + add_wall_spike(x, y, width, height, facing) : Spike
+    + update(player)
+    + draw(surface, camera_x)
+  }
+
+  class Coin {
+    + rect : Rect
+    + value : int
+    + collected : bool
+    - _bob_offset : float
+    --
+    + update()
+    + draw(surface, camera_x)
+  }
+
+  class CoinGroup {
+    + coins : List<Coin>
+    --
+    + add(x, y, value) : Coin
+    + update(player, particles) : int
+    + reset()
+    + draw(surface, camera_x)
+  }
+
+  class Checkpoint {
+    + rect : Rect
+    + active : bool
+    --
+    + try_activate(player) : bool
+    + player_in_shop_range(player) : bool
+    + respawn_point() : tuple
+    + draw(surface, camera_x)
+  }
+}
+
+' ---------------------------------------------------------------------
+' systems
+' ---------------------------------------------------------------------
+package "systems" #F4ECF7 {
+  class Shop {
+    + {static} OPTIONS : List<str>
+    + selected_index : int
+    --
+    + move_selection(delta)
+    + selected_option() : str
+    + purchase_selected(player) : bool
+    + can_afford(player, kind) : bool
+  }
+
+  class ShopZone {
+    + rect : Rect
+    --
+    + player_in_range(player) : bool
+  }
+
+  class RespawnSystem {
+    + core_x : int
+    + core_y : int
+    --
+    + set_core(x, y)
+    + respawn(player)
+  }
+
+  class SoundManager {
+    + enabled : bool
+    + sounds : dict
+    --
+    + play(name)
+    - _build_sounds()
+  }
+
+  class Particle <<__slots__>> {
+    + x : float
+    + y : float
+    + vx : float
+    + vy : float
+    + life : int
+    + max_life : int
+    + size : int
+    + color : tuple
+    + gravity : float
+    --
+    + update() : bool
+    + draw(surface, camera_x)
+  }
+
+  class ParticleSystem {
+    + particles : List<Particle>
+    --
+    + update()
+    + draw(surface, camera_x)
+    + emit_hit(x, y, color, count)
+    + emit_coin(x, y)
+    + emit_dust(x, y, count)
+    + emit_death(x, y)
+    + emit_checkpoint(x, y)
+    + emit_dash_trail(x, y)
+  }
+
+  class collision <<module>> {
+    + {static} move_and_collide(entity_rect, vel_x, vel_y, solids) : tuple
+    + {static} rect_collides_any(rect, solids) : bool
+    + {static} ground_exists_below(rect, direction, solids, probe_distance) : bool
+  }
+
+  class combat <<module>> {
+    + {static} resolve_player_attack(player, enemies, particles) : tuple
+  }
+
+  class progression <<module>> {
+    + {static} upgrade_description(kind) : str
+    + {static} apply_full_heal_on_upgrade(player)
+  }
+
+  class audio_helpers <<module>> {
+    - {static} _envelope(n, attack, decay)
+    - {static} _tone(freq, duration, wave, volume, sweep_to, noise_amount)
+  }
+}
+
+' ---------------------------------------------------------------------
+' screens
+' ---------------------------------------------------------------------
+package "screens" #EAF2F8 {
+  class MenuScreen {
+    + title_font : Font
+    + subtitle_font : Font
+    + body_font : Font
+    + pulse : float
+    --
+    + update()
+    + draw(surface)
+  }
+
+  class HUD {
+    + font : Font
+    + small_font : Font
+    + big_font : Font
+    --
+    + draw(surface, player)
+    + draw_prompt(surface, text)
+    + draw_shop(surface, player, shop)
+    - _draw_health_bar(surface, player)
+    - _draw_coins(surface, player)
+    - _draw_dash(surface, player)
+  }
+
+  class GameOverScreen {
+    + title_font : Font
+    + body_font : Font
+    + timer : int
+    + MIN_DISPLAY_FRAMES : int
+    --
+    + reset()
+    + update()
+    + ready_to_continue() : bool
+    + draw(surface, player)
+  }
+
+  class PauseMenu {
+    + {static} OPTIONS : List<str>
+    + selected_index : int
+    + big_font : Font
+    + font : Font
+    + small_font : Font
+    --
+    + reset_selection()
+    + move_selection(delta)
+    + selected_option() : str
+    + draw(surface)
+  }
+
+  class StoryPopup {
+    + {static} DISPLAY_FRAMES : int
+    + {static} FADE_FRAMES : int
+    + text : str
+    + timer : int
+    + font : Font
+    --
+    + show(text)
+    + update()
+    + draw(surface)
+  }
+
+  class VictoryScreen {
+    + title_font : Font
+    + body_font : Font
+    + small_font : Font
+    --
+    + draw(surface, player)
+  }
+}
+
+' =====================================================================
+' HERANÇA
+' =====================================================================
+Enemy <|-- BasicEnemy
+Enemy <|-- RangedEnemy
+Enemy <|-- FlyingEnemy
+Enemy <|-- WallSentinel
+Enemy <|-- Boss
+
+Platform <|-- MovingPlatform
+Platform <|-- CrumblingPlatform
+
+' =====================================================================
+' COMPOSIÇÃO / AGREGAÇÃO
+' =====================================================================
+' Game (orquestrador)
+Game *-- StateMachine
+Game *-- InputManager
+Game *-- SoundManager
+Game *-- MenuScreen
+Game *-- HUD
+Game *-- GameOverScreen
+Game *-- VictoryScreen
+Game *-- PauseMenu
+Game *-- StoryPopup
+Game *-- Shop
+Game *-- ParticleSystem
+Game o-- "0..1" Level
+Game o-- "0..1" Player
+Game o-- "0..1" RespawnSystem
+
+' Player
+Player *-- PlayerStats
+Player *-- PlayerAttack
+Player *-- SpriteAnimator
+Player o-- "0..1" Platform : standing_platform
+
+' Level
+Level *-- PlatformGroup
+Level *-- ObstacleGroup
+Level *-- CoinGroup
+Level *-- "0..*" Checkpoint
+Level o-- "0..*" Enemy
+Level *-- "0..1" Boss
+Level *-- "0..1" ShopZone
+
+' Coleções
+PlatformGroup *-- "0..*" Platform
+ObstacleGroup *-- "0..*" Spike
+CoinGroup *-- "0..*" Coin
+ParticleSystem *-- "0..*" Particle
+
+' =====================================================================
+' DEPENDÊNCIAS (uso por chamada / parâmetro)
+' =====================================================================
+main ..> Game : cria e executa
+Game ..> level_builders : build_main_level()\nbuild_boss_level()
+Game ..> save : save/load/delete
+Game ..> combat : resolve_player_attack()
+level_builders ..> Level : constrói
+level_builders ..> BasicEnemy
+level_builders ..> RangedEnemy
+level_builders ..> FlyingEnemy
+level_builders ..> WallSentinel
+level_builders ..> Boss
+level_builders ..> MovingPlatform
+level_builders ..> CrumblingPlatform
+
+Level ..> collision
+Level ..> Player : move_and_collide
+Enemy ..> Level : update(level, ...)
+Enemy ..> Player : contato / projéteis
+Boss ..> Level
+Boss ..> Player
+combat ..> Player
+combat ..> Enemy
+combat ..> ParticleSystem
+Player ..> Level : update(level)
+Player ..> InputManager : handle_input()
+SpriteAnimator ..> player_sprites : _load_all()
+SoundManager ..> audio_helpers
+
+save ..> PlayerStats : to_dict/from_dict
+RespawnSystem ..> Player : respawn_at_core()
+Shop ..> Player : compra
+Shop ..> progression
+ShopZone ..> Player
+Checkpoint ..> Player
+Spike ..> Player : check_damage()
+CoinGroup ..> Player : coleta / ímã
+CoinGroup ..> ParticleSystem
+
+HUD ..> Shop : draw_shop()
+HUD ..> progression : upgrade_description()
+HUD ..> Player
+GameOverScreen ..> Player
+VictoryScreen ..> Player
+
+@enduml

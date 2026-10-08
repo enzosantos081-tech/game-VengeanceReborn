@@ -95,7 +95,8 @@ const config = {
             position: 'left',
             label: 'Tutorial',
           },
-          {to: '/Regras', label: 'Regras', position: 'left'},
+          {to: '/regras', label: 'Regras', position: 'left'},
+          {to: '/diagramas-uml', label: 'Diagramas UML', position: 'left'},
           {
             href: 'https://github.com/facebook/docusaurus',
             label: 'GitHub',
