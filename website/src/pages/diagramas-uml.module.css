@@ -1,0 +1,164 @@
+.page {
+  min-height: calc(100vh - 60px);
+  padding: 4rem 0 5rem;
+  background:
+    linear-gradient(115deg, rgba(48, 82, 130, 0.11), transparent 44%),
+    linear-gradient(285deg, rgba(135, 42, 46, 0.08), transparent 42%),
+    var(--ifm-background-color);
+}
+
+.header {
+  max-width: 760px;
+  margin: 0 auto 4rem;
+  text-align: center;
+}
+
+.eyebrow {
+  margin-bottom: 0.75rem;
+  color: var(--ifm-color-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.header h1 {
+  margin-bottom: 1rem;
+}
+
+.intro {
+  margin: 0 auto;
+  max-width: 620px;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.1rem;
+}
+
+.sectionNav {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.sectionNav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ifm-color-emphasis-800);
+  font-weight: 600;
+}
+
+.sectionNav span {
+  color: var(--ifm-color-primary);
+  font-size: 0.85rem;
+}
+
+.section {
+  margin: 0 auto 5rem;
+  scroll-margin-top: 5rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.sectionHeader h2 {
+  margin: 0;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.diagram {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  background: var(--ifm-background-surface-color);
+}
+
+.imageLink {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  padding: 1rem;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.imageLink img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.caption {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.index {
+  padding-top: 0.15rem;
+  color: var(--ifm-color-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.caption h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+}
+
+.caption p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.sourceLink {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media screen and (max-width: 700px) {
+  .page {
+    padding: 2.5rem 0 3rem;
+  }
+
+  .header {
+    margin-bottom: 3rem;
+  }
+
+  .sectionHeader {
+    display: block;
+  }
+
+  .sectionHeader p {
+    margin-top: 0.5rem;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .imageLink {
+    min-height: 200px;
+  }
+}

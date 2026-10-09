@@ -1,0 +1,95 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+:root {
+  --ifm-color-primary: #c44e45;
+  --ifm-color-primary-dark: #ad403b;
+  --ifm-color-primary-darker: #9b3835;
+  --ifm-color-primary-darkest: #7b2d2d;
+  --ifm-color-primary-light: #d76555;
+  --ifm-color-primary-lighter: #e27b65;
+  --ifm-color-primary-lightest: #ed9b7d;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(197, 83, 69, 0.16);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #e16a58;
+  --ifm-color-primary-dark: #ce574c;
+  --ifm-color-primary-darker: #bd4943;
+  --ifm-color-primary-darkest: #9c3937;
+  --ifm-color-primary-light: #ed8067;
+  --ifm-color-primary-lighter: #f49a77;
+  --ifm-color-primary-lightest: #f8b78f;
+  --ifm-background-color: #0b0f17;
+  --ifm-background-surface-color: #131a25;
+  --ifm-font-color-base: #e3e5e9;
+  --ifm-heading-color: #f4eee4;
+  --ifm-navbar-background-color: rgba(8, 12, 19, 0.94);
+  --ifm-footer-background-color: #080b11;
+  --ifm-color-emphasis-100: #171e29;
+  --ifm-color-emphasis-200: #242c38;
+  --ifm-color-emphasis-300: #333c49;
+  --ifm-color-emphasis-600: #a0a9b7;
+  --ifm-color-emphasis-700: #bbc1ca;
+  --ifm-color-emphasis-800: #d2d5da;
+  --docusaurus-highlighted-code-line-bg: rgba(197, 83, 69, 0.2);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--ifm-background-color);
+  background-image:
+    radial-gradient(ellipse at 5% 0%, rgba(46, 82, 130, 0.12), transparent 38rem),
+    radial-gradient(ellipse at 96% 8%, rgba(137, 37, 43, 0.1), transparent 36rem);
+  background-attachment: fixed;
+}
+
+.navbar {
+  border-bottom: 1px solid rgba(157, 174, 200, 0.14);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(16px);
+}
+
+.navbar__title {
+  color: #f4eee4;
+  letter-spacing: 0.03em;
+}
+
+.navbar__logo {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.navbar__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.navbar__link {
+  transition: color 160ms ease;
+}
+
+.navbar__link:hover,
+.navbar__link--active {
+  color: #f49a77;
+}
+
+.footer {
+  border-top: 1px solid rgba(157, 174, 200, 0.12);
+}
+
+.button {
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+}
