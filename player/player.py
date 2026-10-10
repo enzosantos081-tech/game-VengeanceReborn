@@ -53,18 +53,14 @@ class Player:
 
         # ---------- Dash (tecla Q) ----------
         self.dashing = False
-        self.dash_timer = 0
+        self.dash_timer_ms = 0.0
         self.dash_charges = 1          # cargas de dash disponíveis agora
         self.max_dash_charges = 1      # recalculado a cada frame (1 + stats.extra_dash_charges)
-        self.dash_recharge_timer = 0
+        self.dash_recharge_timer_ms = 0.0
         self.dash_dir = 1
 
-        # ---------- Wall slide / wall jump ----------
-        self.touching_wall = 0        # -1 esquerda, 0 nenhuma, 1 direita (só quando no ar)
-        self.wall_jump_lock_timer = 0  # ignora input horizontal por alguns frames após um wall jump
-
         # ---------- Pulo duplo (melhoria da loja) ----------
-        self.air_jumps_remaining = 0  # recarrega ao tocar o chão ou uma parede
+        self.air_jumps_remaining = 0  # recarrega ao tocar o chão
 
         # Flags de eventos do frame atual (usados para disparar sons em core/game.py)
         self.just_jumped = False
@@ -84,12 +80,10 @@ class Player:
         self.invuln_timer = settings.PLAYER_INVULN_FRAMES
         self.standing_platform = None
         self.dashing = False
-        self.dash_timer = 0
+        self.dash_timer_ms = 0.0
         self.dash_charges = 1 + self.stats.extra_dash_charges
         self.max_dash_charges = self.dash_charges
-        self.dash_recharge_timer = 0
-        self.touching_wall = 0
-        self.wall_jump_lock_timer = 0
+        self.dash_recharge_timer_ms = 0.0
         self.air_jumps_remaining = 0
 
     def take_damage(self, amount, knockback_dir=0):
@@ -114,11 +108,7 @@ class Player:
             move += 1
             self.facing_right = True
 
-        if self.wall_jump_lock_timer <= 0:
-            self.vel_x = move * settings.PLAYER_SPEED
-        # Enquanto o wall jump está "travado" (poucos frames), o input
-        # horizontal é ignorado para garantir que o jogador realmente se
-        # afaste da parede em vez de grudar nela de novo instantaneamente.
+        self.vel_x = move * settings.PLAYER_SPEED
 
         if input_manager.jump_pressed():
             self.jump_buffer_timer = settings.JUMP_BUFFER_FRAMES
@@ -142,7 +132,7 @@ class Player:
             return
         self.dash_charges -= 1
         self.dashing = True
-        self.dash_timer = settings.DASH_DURATION_FRAMES
+        self.dash_timer_ms = float(settings.DASH_DURATION_MS)
         self.dash_dir = 1 if self.facing_right else -1
         # O dash concede algumas frames de invencibilidade, um recurso
         # comum em jogos de plataforma para permitir atravessar perigos.
@@ -155,8 +145,6 @@ class Player:
         can_ground_jump = self.on_ground or self.coyote_timer > 0
         if can_ground_jump:
             self._start_jump(self.stats.jump_force)
-        elif self.touching_wall != 0:
-            self._start_wall_jump()
         elif self.air_jumps_remaining > 0:
             self.air_jumps_remaining -= 1
             self._start_jump(self.stats.jump_force)
@@ -168,69 +156,50 @@ class Player:
         self.jump_buffer_timer = 0
         self.just_jumped = True
 
-    def _start_wall_jump(self):
-        """Pulo na parede: impulso diagonal para longe dela. É um recurso
-        independente do pulo duplo (não consome air_jumps_remaining)."""
-        push_dir = -self.touching_wall
-        self.vel_y = settings.WALL_JUMP_FORCE_Y
-        self.vel_x = settings.WALL_JUMP_FORCE_X * push_dir
-        self.knockback_x = 0
-        self.wall_jump_lock_timer = settings.WALL_JUMP_LOCK_FRAMES
-        self.facing_right = push_dir > 0
-        self.touching_wall = 0
-        self.coyote_timer = 0
-        self.jump_buffer_timer = 0
-        self.just_jumped = True
-
-    def update(self, level):
+    def update(self, level, dt_ms=None):
         if not self.alive:
             return
+
+        # Usa o tempo real decorrido para que duração, distância e cooldown
+        # não dependam da taxa de FPS. O valor padrão preserva compatibilidade
+        # com chamadas antigas de update(level) em testes ou ferramentas.
+        if dt_ms is None:
+            dt_ms = 1000.0 / settings.FPS
+        dt_ms = max(0.0, min(float(dt_ms), 100.0))
+        frame_scale = dt_ms / (1000.0 / settings.FPS)
 
         self.just_jumped = False
         self.just_dashed = False
         self._apply_jump_if_possible()
 
-        # Recarga de cargas de dash: enquanto estiver abaixo do máximo
-        # (1, ou 2 se a melhoria "carga extra de dash" foi comprada),
-        # conta até settings.DASH_COOLDOWN_FRAMES e devolve uma carga.
+        # A recarga avança apenas enquanto a simulação do jogador está ativa;
+        # pausar o jogo não consome o cooldown em segundo plano.
         self.max_dash_charges = 1 + self.stats.extra_dash_charges
         if self.dash_charges < self.max_dash_charges:
-            self.dash_recharge_timer += 1
-            if self.dash_recharge_timer >= settings.DASH_COOLDOWN_FRAMES:
-                self.dash_recharge_timer = 0
-                self.dash_charges += 1
+            self.dash_recharge_timer_ms += dt_ms
+            if self.dash_recharge_timer_ms >= settings.DASH_COOLDOWN_MS:
+                self.dash_recharge_timer_ms -= settings.DASH_COOLDOWN_MS
+                self.dash_charges = min(self.max_dash_charges, self.dash_charges + 1)
+                if self.dash_charges >= self.max_dash_charges:
+                    self.dash_recharge_timer_ms = 0.0
         else:
-            self.dash_recharge_timer = 0
-
-        if self.wall_jump_lock_timer > 0:
-            self.wall_jump_lock_timer -= 1
+            self.dash_recharge_timer_ms = 0.0
 
         if self.dashing:
-            # Durante o dash: velocidade horizontal fixa na direção do
-            # dash, sem gravidade, movimento reto (comum em dashes de
-            # plataforma - dá uma sensação de golpe rápido e confiável).
-            self.dash_timer -= 1
+            # O deslocamento é calculado em pixels/segundo. No último passo,
+            # usa somente o tempo restante do dash para não exceder a distância.
+            active_dash_ms = min(dt_ms, self.dash_timer_ms)
+            self.dash_timer_ms -= active_dash_ms
             self.vel_y = 0
-            horizontal_vel = settings.DASH_SPEED * self.dash_dir
-            if self.dash_timer <= 0:
+            horizontal_vel = settings.DASH_SPEED * (active_dash_ms / 1000.0) * self.dash_dir
+            if self.dash_timer_ms <= 0:
+                self.dash_timer_ms = 0.0
                 self.dashing = False
         else:
             # Gravidade
             self.vel_y += settings.GRAVITY
             if self.vel_y > settings.MAX_FALL_SPEED:
                 self.vel_y = settings.MAX_FALL_SPEED
-
-            # Wall slide: se no frame anterior o jogador ficou encostado
-            # numa parede (no ar) e continua segurando a direção dela,
-            # a queda é freada até uma velocidade máxima - dá tempo de
-            # reagir e mantém a janela pro wall jump.
-            pressing_into_wall = (
-                (self.touching_wall == 1 and self.vel_x > 0)
-                or (self.touching_wall == -1 and self.vel_x < 0)
-            )
-            if not self.on_ground and self.touching_wall != 0 and pressing_into_wall:
-                if self.vel_y > settings.WALL_SLIDE_MAX_FALL_SPEED:
-                    self.vel_y = settings.WALL_SLIDE_MAX_FALL_SPEED
 
             horizontal_vel = self.vel_x
 
@@ -256,11 +225,9 @@ class Player:
         elif self.coyote_timer > 0 and not self.on_ground:
             self.coyote_timer -= 1
 
-        # O pulo aéreo extra (pulo duplo) recarrega sempre que o jogador
-        # toca o chão OU uma parede - tocar numa parede "reseta" a
-        # chance de pulo aéreo, como é comum em jogos com wall jump e
-        # pulo duplo juntos.
-        if self.on_ground or self.touching_wall != 0:
+        # O pulo aéreo extra (melhoria de pulo duplo) recarrega ao tocar
+        # o chão. Encostar em superfícies laterais não concede saltos.
+        if self.on_ground:
             self.air_jumps_remaining = self.stats.extra_jumps
 
         self.attack.update()
@@ -284,9 +251,7 @@ class Player:
         elif self.attack.active:
             state = "attack"
         elif not self.on_ground:
-            if self.touching_wall != 0:
-                state = "wallslide"
-            elif self.vel_y < 0:
+            if self.vel_y < 0:
                 state = "jump"
             else:
                 state = "fall"

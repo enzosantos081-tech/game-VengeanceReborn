@@ -564,6 +564,127 @@ class MundoBackdrop:
         surface.blit(self.image, (-scroll, 0))
 
 
+
+
+class SegmentedWorldBackdrop:
+    """Fundo em camadas de parallax para deserto e caverna.
+
+    Cada PNG é uma camada independente com transparência. As camadas são
+    preparadas uma vez, mantêm a proporção e se repetem horizontalmente.
+    O movimento é relativo à câmera e cada profundidade tem uma velocidade.
+    Entre x=6000 e x=7000, as duas composições fazem crossfade.
+    """
+    PARALLAX_FACTORS = (0.04, 0.08, 0.13, 0.19, 0.25, 0.32, 0.40, 0.48)
+    TRANSITION_START = 6000
+    TRANSITION_END = 7000
+
+    @classmethod
+    def _resolve_dir(cls, name):
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, "assets", "images", name)
+
+    @classmethod
+    def available(cls):
+        desert = cls._resolve_dir("parallax_desert")
+        cave = cls._resolve_dir("parallax_cave")
+        return (all(os.path.isfile(os.path.join(desert, f"{i}.png")) for i in range(1, 5))
+                and all(os.path.isfile(os.path.join(cave, f"{i}.png")) for i in range(1, 8)))
+
+    def __init__(self, level_width):
+        self.level_width = level_width
+        self.screen_w = settings.SCREEN_WIDTH
+        self.screen_h = settings.SCREEN_HEIGHT
+        self.desert = self._load_desert_layers()
+        self.cave = self._load_layers("parallax_cave", list(range(7, 0, -1)))
+        self._flipped_cache = {}
+
+    def _load_desert_layers(self):
+        """Camadas do pacote Desert: céu, sol, montanhas e ruínas.
+
+        Os fundos quadrados são escalados uniformemente pela altura; o sol
+        fica numa superfície transparente do tamanho da tela para manter sua
+        escala visual pequena e estável. Tudo é preparado só na inicialização.
+        """
+        folder = self._resolve_dir("parallax_desert")
+        loaded = []
+        factors = {"1.png": 0.02, "2.png": 0.035, "3.png": 0.10, "4.png": 0.22}
+        for filename in ("1.png", "2.png", "3.png", "4.png"):
+            raw = pygame.image.load(os.path.join(folder, filename)).convert_alpha()
+            if filename == "2.png":
+                layer = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+                sun_size = max(24, round(self.screen_h * 0.12))
+                sun = pygame.transform.smoothscale(raw, (sun_size, sun_size))
+                layer.blit(sun, (round(self.screen_w * 0.72 - sun_size / 2), round(self.screen_h * 0.14)))
+            else:
+                scale = self.screen_h / raw.get_height()
+                size = (max(1, round(raw.get_width() * scale)), self.screen_h)
+                layer = pygame.transform.smoothscale(raw, size)
+            loaded.append((layer, factors[filename]))
+        return loaded
+
+    def _load_layers(self, folder, indices):
+        result = []
+        for order, index in enumerate(indices):
+            path = os.path.join(self._resolve_dir(folder), f"{index}.png")
+            raw = pygame.image.load(path).convert_alpha()
+            # Escala uniforme pela altura; a arte 16:9 não é deformada.
+            scale = self.screen_h / raw.get_height()
+            size = (max(1, round(raw.get_width() * scale)), self.screen_h)
+            image = pygame.transform.smoothscale(raw, size)
+            factor = self.PARALLAX_FACTORS[min(order, len(self.PARALLAX_FACTORS)-1)]
+            result.append((image, factor))
+        return result
+
+    def _draw_layers(self, surface, layers, camera_x, alpha=255):
+        for image, factor in layers:
+            tile_w = image.get_width()
+            offset = int((camera_x * factor) % tile_w)
+            x = -offset
+            tile_num = 0
+            while x < self.screen_w:
+                tile = image
+                if tile_num % 2:
+                    key = (id(image), "flip")
+                    if key not in self._flipped_cache:
+                        self._flipped_cache[key] = pygame.transform.flip(image, True, False)
+                    tile = self._flipped_cache[key]
+                if alpha >= 255:
+                    surface.blit(tile, (x, 0))
+                elif tile.get_flags() & pygame.SRCALPHA:
+                    # Não altera as camadas originais; alpha temporário só durante a transição.
+                    faded = tile.copy()
+                    faded.set_alpha(alpha)
+                    surface.blit(faded, (x, 0))
+                else:
+                    faded = tile.copy()
+                    faded.set_alpha(alpha)
+                    surface.blit(faded, (x, 0))
+                x += tile_w
+                tile_num += 1
+
+    def draw(self, surface, camera_x):
+        x = max(0, camera_x)
+        surface.fill((16, 18, 25))
+        if x < self.TRANSITION_START:
+            self._draw_layers(surface, self.desert, x)
+        elif x >= self.TRANSITION_END:
+            self._draw_layers(surface, self.cave, x)
+        else:
+            t = (x - self.TRANSITION_START) / (self.TRANSITION_END - self.TRANSITION_START)
+            # Renderiza as duas composições em superfícies de tela e mistura,
+            # para que o alpha seja aplicado à composição inteira e não por camada.
+            if not hasattr(self, "_transition_surface"):
+                self._transition_surface = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+                self._cave_surface = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+            self._transition_surface.fill((16, 18, 25, 255))
+            self._cave_surface.fill((16, 18, 25, 255))
+            self._draw_layers(self._transition_surface, self.desert, x)
+            self._draw_layers(self._cave_surface, self.cave, x)
+            surface.blit(self._transition_surface, (0, 0))
+            self._cave_surface.set_alpha(round(255 * t))
+            surface.blit(self._cave_surface, (0, 0))
+            self._cave_surface.set_alpha(255)
+
 # ======================================================================
 # Background exclusivo da arena do Boss Vharok (assets/images/boss_arena.png).
 # Puramente visual, sem colisão. Salão gótico simétrico com trono ao fundo.

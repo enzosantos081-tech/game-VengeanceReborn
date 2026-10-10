@@ -25,17 +25,19 @@ Requer Python 3.10+.
 | `ESPAÇO` / `W` / `↑`    | Pular (com coyote time + buffer) |
 | `Clique esquerdo` (mouse) | Atacar (mira na direção do cursor, sem virar o personagem) |
 | `Q`                     | Dash                            |
-| Segurar direção da parede no ar | Wall slide (queda freada) + Wall jump se apertar pular |
 | `ESPAÇO` no ar (2ª vez)  | Pulo duplo (se comprado na loja) |
 | `E` / `ENTER`           | Interagir (loja / confirmar menu) |
 | `ESC` / `P`             | Pausar (abre menu com opções)  |
-| `W`/`S`                 | Navegar opções (loja / pausa)  |
+| `W`/`S` ou `↑`/`↓`      | Navegar itens da loja / pausa |
+| `A`/`D` ou `←`/`→`      | Trocar categoria na loja       |
+| `F`                     | Aprimorar a espada selecionada |
+| `Mouse`                 | Selecionar, comprar e equipar itens da loja |
 | `F3`                    | Modo DEBUG (grade, hitboxes, coordenadas) |
 
 ## Modo DEBUG (F3)
 
 Ferramenta de desenvolvimento pra ajudar a posicionar objetos na fase
-(paredes, chão, inimigos, moedas etc.) sem precisar adivinhar
+(chão, plataformas, inimigos, moedas etc.) sem precisar adivinhar
 coordenadas. Aperte `F3` a qualquer momento durante o jogo pra ligar
 ou desligar. Com DEBUG **desligado**, o jogo funciona exatamente como
 sempre — o modo é puramente aditivo (`core/debug_overlay.py`).
@@ -50,7 +52,7 @@ Com DEBUG **ligado**, aparecem:
   coordenadas nas linhas principais, que acompanha a câmera (não fica
   fixa na tela).
 - As hitboxes de colisão já existentes no jogo, desenhadas por cima:
-  jogador (ciano), inimigos (vermelho), chão/paredes/plataformas
+  jogador (ciano), inimigos (vermelho), chão/plataformas
   (amarelo), espinhos (rosa) e moedas/checkpoints/zona da
   loja/gatilho do Boss (verde). Não é um sistema de colisão novo — são
   os mesmos `Rect` que o jogo já usa pra física e gameplay.
@@ -59,20 +61,22 @@ Com DEBUG **ligado**, aparecem:
 
 ### Concluído (Prioridade 1 — obrigatório / MVP)
 - Tela inicial, HUD, tela de "morte" (retorno pelo Núcleo) e tela de vitória
-- **Sprite animado do Kael** (`assets/player/`, `player/player_sprites.py`):
-  extraído de uma sprite sheet fornecida, com animações reais de
-  idle, corrida, pulo, queda, wall slide, dash, ataque (combo de 4
-  golpes) e morte — antes o jogador era só um retângulo
+- **Sprite animado do Kael** (`assets/player/kael_spritesheet.png`,
+  `player/player_sprites.py`): spritesheet única (células de 128x128,
+  6 colunas x 10 linhas) com animações de idle, corrida, pulo, queda,
+  dash, ataque e morte. O
+  mapeamento linha/coluna -> estado está documentado no topo de
+  `player_sprites.py`. A hitbox continua independente do tamanho do sprite
 - Movimentação, pulo, gravidade e colisões (eixo separado)
 - Ataque corpo a corpo com hitbox e cooldown
 - Inimigo comum com patrulha e dano por contato
 - Sistema de vida e dano (jogador e inimigos) — **barra de 0-100** (não
   mais corações), com cor mudando de verde a vermelho conforme desce
-- Moedas coletáveis e sistema de melhorias (vida, dano, pulo)
+- Moedas coletáveis, vida máxima, pulo duplo, ímã de moedas e poção de cura
 - Morte → retorno ao Núcleo → mantém progresso → nova tentativa
-- Fase 1 completa (Regiões 1 a 4, ~6400px, com buracos, espinhos, plataformas)
+- Fase 1 expandida para 12.800px (8 regiões contínuas, com buracos, espinhos, plataformas, inimigos e checkpoints)
 - **Cenário de fundo elaborado** (`world/background.py`): a Fase 1
-  inteira (Regiões 1 a 4) tem UMA identidade visual contínua — noite,
+  inteira (Regiões 1 a 8) tem UMA identidade visual contínua — noite,
   lua grande com brilho suave, nuvens, duas camadas de montanhas em
   paralaxe, uma vila destruída ao fundo (casas com telhados quebrados
   e vigas partidas), entulho, janelas com luz quente e fogueiras com
@@ -90,17 +94,37 @@ Com DEBUG **ligado**, aparecem:
 - Segundo tipo de inimigo (`RangedEnemy`, ataca à distância com projéteis)
 - **Morcego Sombrio** (`FlyingEnemy`): inimigo voador, patrulha no ar em
   zigue-zague sem sofrer gravidade, ignorando plataformas e buracos
-- Loja com interface própria (seleção, custo, nível de melhoria) — agora
-  com **8 opções** em duas colunas: vida, dano, pulo, velocidade de
-  ataque, pulo duplo, **ímã de moedas** (atrai moedas próximas
-  automaticamente), **carga extra de dash** (permite usar o dash 2x
-  antes de recarregar) e **cura** (item consumível, restaura vida)
+- Loja temática com abas de **Espadas**, **Melhorias** e **Consumíveis**:
+  quatro espadas equipáveis com dano real no combate e aprimoramento pago;
+  vida máxima, pulo duplo, ímã de moedas com alcance aumentado e poção de cura.
+  Compras e equipamentos são salvos imediatamente. As antigas melhorias
+  genéricas de dano, força de pulo, velocidade de ataque e carga extra de dash
+  não estão mais disponíveis na loja.
 - Save/load simples em JSON (`core/save.py`) entre execuções
 - Boss com **2 padrões de ataque**: "slam"/terremoto corpo a corpo
   (sempre, com uma zona de perigo pulsando no chão avisando onde vai
   bater) e uma **rajada de 5 projéteis rápidos em leque** exclusiva da
   Fase 2 (abaixo de 50% de vida), escolhida aleatoriamente entre as
   investidas
+- **Investida do Vharok** (`enemies/boss.py`, parâmetros `BOSS_CHARGE_*` em
+  `config/settings.py`): ocasionalmente, com Kael longe, ele avisa (faixa
+  azul no chão), vira para o lado de Kael e avança rápido em linha reta;
+  para ao acertar (um dano por investida), bater num colisor sólido, chegar ao
+  limite da arena ou esgotar distância/tempo, e então fica exposto numa
+  recuperação. Há intervalo mínimo entre investidas
+- **Golpe curto do Vharok** (`enemies/boss.py`, parâmetros `BOSS_MELEE_*` em
+  `config/settings.py`): se Kael ficar a até 90 px (horizontal) e na altura do
+  corpo, ele vira para o lado de Kael, avisa (braços erguidos + zona de perigo
+  pulsando), golpeia com uma hitbox curta à frente (dano uma vez por golpe,
+  respeitando os i-frames de Kael) e se recupera. Intervalo mínimo de 100
+  frames entre golpes (85 na Fase 2). Pode **cancelar o aviso do soco no chão
+  (slam)**, que ainda não executou nada; se o slam já está para sair ou já
+  disparou, termina primeiro e o golpe curto entra assim que a hitbox e a
+  animação do slam acabam. Um slam cancelado garante que o próximo vá até o fim
+- **Inimigo comum**: ao atacar, dá um passo curto na direção de Kael durante a
+  preparação do golpe (`BASIC_ENEMY_ATTACK_ADVANCE_*` em `config/settings.py`),
+  com limite de distância, sem ultrapassar Kael nem sair de plataformas; o
+  dano continua sendo resolvido uma vez, no quadro de impacto
 - **Checkpoints**: bandeiras que, ao serem tocadas, tornam-se o novo
   ponto do Núcleo do Retorno — não é mais preciso voltar à Região 1
   inteira a cada morte. Todo checkpoint já ativado também dá acesso à

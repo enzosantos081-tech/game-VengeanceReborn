@@ -54,6 +54,10 @@ class InputManager:
     def is_released(self, key):
         return key in self._released_this_frame
 
+    def mouse_pressed(self, button=1):
+        """True apenas no frame em que o botão do mouse foi pressionado."""
+        return button in self._mouse_pressed_this_frame
+
     # ---------- Ações de alto nível (facilita troca de bind no futuro) ----------
     def move_left(self):
         return self.is_held(pygame.K_a) or self.is_held(pygame.K_LEFT)
@@ -98,3 +102,9 @@ class InputManager:
 
     def up_pressed(self):
         return self.is_pressed(pygame.K_w) or self.is_pressed(pygame.K_UP)
+
+    def left_pressed(self):
+        return self.is_pressed(pygame.K_a) or self.is_pressed(pygame.K_LEFT)
+
+    def right_pressed(self):
+        return self.is_pressed(pygame.K_d) or self.is_pressed(pygame.K_RIGHT)

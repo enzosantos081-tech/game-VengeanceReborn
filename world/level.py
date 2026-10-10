@@ -1,13 +1,14 @@
 """
 world/level.py
 Responsável pela criação e gerenciamento da fase. A Fase 1 (Jornada) é
-dividida visualmente em 4 regiões dentro do MESMO mapa (sem telas de
-carregamento separadas):
-  Região 1 - Área inicial (Núcleo do Retorno + Loja)
-  Região 2 - Floresta (plataformas, inimigos, buracos, moedas)
-  Região 3 - Ruínas (obstáculos maiores, inimigos, plataformas difíceis)
-  Região 4 - Entrada do castelo (acesso à Fase 2)
-Todas as 4 regiões compartilham a MESMA identidade visual (ver
+dividida visualmente em 8 regiões dentro do MESMO mapa de 12.800 px
+(sem telas de carregamento separadas):
+  Regiões 1 a 4 - Área inicial, floresta, ruínas e primeira aproximação do castelo
+  Região 5 - Desfiladeiro
+  Região 6 - Caminho das cinzas
+  Região 7 - Muralha exterior
+  Região 8 - Portões do castelo (acesso à Fase 2)
+Todas as regiões compartilham a MESMA identidade visual (ver
 world/background.py) - são só trechos de conteúdo (plataformas,
 inimigos, decoração) dentro de um único cenário contínuo, não biomas
 separados.
@@ -25,7 +26,7 @@ from enemies.flying_enemy import FlyingEnemy
 from enemies.boss import Boss
 from systems import collision
 from systems.shop import ShopZone
-from world.background import VillageBackdrop, CastleBackdrop, MundoBackdrop, BossArenaBackdrop
+from world.background import VillageBackdrop, CastleBackdrop, MundoBackdrop, SegmentedWorldBackdrop, BossArenaBackdrop
 
 GROUND_Y = settings.SCREEN_HEIGHT - 64
 
@@ -94,12 +95,9 @@ class Level:
             player.rect.y += player.standing_platform.delta_y
 
         solids = self.platforms.rects()
-        new_rect, on_ground, wall_dir = collision.move_and_collide(player.rect, vel_x, vel_y, solids)
+        new_rect, on_ground = collision.move_and_collide(player.rect, vel_x, vel_y, solids)
         player.rect = new_rect
         player.on_ground = on_ground
-        # Só conta como "encostado na parede" se estiver no ar - andar
-        # colado numa parede no chão não deve ativar o wall slide.
-        player.touching_wall = wall_dir if not on_ground else 0
         player.standing_platform = None
         if on_ground:
             player.vel_y = 0
@@ -119,7 +117,7 @@ class Level:
 
     def move_and_collide_enemy(self, enemy, vel_x, vel_y):
         solids = self.platforms.rects()
-        new_rect, on_ground, _wall_dir = collision.move_and_collide(enemy.rect, vel_x, vel_y, solids)
+        new_rect, on_ground = collision.move_and_collide(enemy.rect, vel_x, vel_y, solids)
         enemy.rect = new_rect
         if on_ground:
             enemy.vel_y = 0
@@ -129,6 +127,11 @@ class Level:
 
     def rect_hits_solid(self, rect):
         return collision.rect_collides_any(rect, self.platforms.rects())
+
+    def has_line_of_sight(self, start, end):
+        """Linha de visão livre entre dois pontos do mundo. Usa os mesmos
+        sólidos que a física e os projéteis (platforms.rects())."""
+        return collision.line_of_sight_clear(start, end, self.platforms.rects())
 
     # ---------- Update ----------
     def update_platforms(self):
@@ -227,11 +230,14 @@ def _add_decor(level, rng, start, end):
 
 
 def build_main_level():
-    """Constrói a Fase 1 - Jornada, com as regiões 1 a 4."""
+    """Constrói a Fase 1 - Jornada, com oito regiões em um mapa contínuo."""
     import random
     rng = random.Random(42)  # seed fixa: fase consistente entre tentativas
 
-    level_width = 6400
+    # A Jornada agora tem 12.800 px de extensão horizontal. As quatro
+    # regiões originais permanecem intactas; as regiões 5 a 8 ampliam a
+    # travessia antes da entrada para o castelo de Vharok.
+    level_width = 12800
     level_height = settings.SCREEN_HEIGHT
     level = Level(level_width, level_height)
 
@@ -316,23 +322,137 @@ def build_main_level():
     level.add_story_trigger(4900, "O castelo de Vharok se ergue no horizonte. O fim da jornada se aproxima.")
 
     # ---------- Região 4: Entrada do castelo (4900 - 6400) ----------
+    # Mantém o trecho original como primeira visão do castelo, mas o portão
+    # final só é alcançado depois das novas regiões.
     plat.add(4900, GROUND_Y, 1500, ground_h, is_ground=True)
     for cx in (5000, 5040, 5080, 6100, 6140, 6180):
         level.coins.add(cx, GROUND_Y - 40)
     level.enemies.append(BasicEnemy(5200, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
     level.enemies.append(BasicEnemy(5800, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
     level.enemies.append(FlyingEnemy(5600, GROUND_Y - 160, patrol_range=170))
-
     level.add_checkpoint(6200, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-    level.add_story_trigger(6250, "As portas do castelo se abrem. Vharok o espera la dentro.")
 
-    level.boss_trigger = pygame.Rect(6300, GROUND_Y - 200, 40, 200)
+    # ---------- Região 5: Desfiladeiro (6400 - 8000) ----------
+    # Saltos sobre vãos curtos, com plataformas elevadas como rotas seguras.
+    plat.add(6400, GROUND_Y, 340, ground_h, is_ground=True)
+    plat.add(6860, GROUND_Y, 440, ground_h, is_ground=True)
+    plat.add(7040, GROUND_Y - 100, 120, 22)
+    plat.add(7220, GROUND_Y - 170, 120, 22)
+    plat.add(7440, GROUND_Y, 560, ground_h, is_ground=True)
+    plat.add(7600, GROUND_Y - 90, 130, 22)
+    level.obstacles.add_spike(6960, GROUND_Y - 16, width=64)
+    level.obstacles.add_spike(7740, GROUND_Y - 16, width=64)
+    for cx, cy in ((6460, GROUND_Y - 40), (6500, GROUND_Y - 40),
+                   (7060, GROUND_Y - 145), (7240, GROUND_Y - 215),
+                   (7500, GROUND_Y - 40), (7540, GROUND_Y - 40),
+                   (7620, GROUND_Y - 135), (7820, GROUND_Y - 40)):
+        level.coins.add(cx, cy)
+    level.enemies.append(BasicEnemy(6900, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(RangedEnemy(7510, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
+    level.enemies.append(FlyingEnemy(7200, GROUND_Y - 210, patrol_range=130))
+    level.add_checkpoint(7900, GROUND_Y - settings.CHECKPOINT_HEIGHT)
+    level.add_story_trigger(6500, "O caminho antigo termina num desfiladeiro. Encontre uma passagem segura.")
 
-    # Background oficial (mundo.png). Se o arquivo faltar, cai no cenário antigo.
-    if MundoBackdrop.available():
+    # Perigos de teto exclusivos da caverna (x >= 7000). As camadas
+    # parallax_cave já fornecem decoração rochosa; estas instâncias usam
+    # o comportamento de aviso/queda existente em ObstacleGroup.
+    for sx, sy, sw, sh in (
+        (7130, GROUND_Y - 500, 30, 42),
+        (7480, GROUND_Y - 470, 34, 46),
+        (8030, GROUND_Y - 490, 30, 42),
+        (8580, GROUND_Y - 470, 34, 46),
+        (9060, GROUND_Y - 500, 30, 42),
+        (9740, GROUND_Y - 485, 34, 46),
+        (10380, GROUND_Y - 495, 30, 42),
+        (11020, GROUND_Y - 470, 34, 46),
+        (11880, GROUND_Y - 490, 30, 42),
+        (12500, GROUND_Y - 480, 34, 46),
+    ):
+        level.obstacles.add_stalactite(sx, sy, width=sw, height=sh, trigger_range=44)
+
+    # ---------- Região 6: Caminho das cinzas (8000 - 9600) ----------
+    # Trecho da caverna simplificado: removidas as duas paredes e a
+    # plataforma elevada que só servia à rota vertical antiga.
+    # O vão de 140 px entre o chão e a próxima área pode ser atravessado
+    # com o pulo normal ou dash; a plataforma quebradiça oferece apoio opcional.
+    plat.add(8000, GROUND_Y, 320, ground_h, is_ground=True)
+    plat.add(8460, GROUND_Y, 340, ground_h, is_ground=True)
+    plat.add_crumbling(8350, GROUND_Y - 70, 90, 22)
+    plat.add(8580, GROUND_Y - 110, 120, 22)
+    plat.add_crumbling(8750, GROUND_Y - 70, 100, 22)
+    plat.add(8800, GROUND_Y, 450, ground_h, is_ground=True)
+    plat.add_moving(9220, GROUND_Y - 45, 100, 20, offset_x=0, offset_y=-75, speed=1.35)
+    plat.add(9380, GROUND_Y, 220, ground_h, is_ground=True)
+    level.obstacles.add_spike(8500, GROUND_Y - 16, width=64)
+    level.obstacles.add_spike(8910, GROUND_Y - 16, width=80)
+    for cx, cy in ((8050, GROUND_Y - 40), (8090, GROUND_Y - 40),
+                   (8370, GROUND_Y - 110), (8610, GROUND_Y - 150),
+                   (8780, GROUND_Y - 110), (8840, GROUND_Y - 40),
+                   (8880, GROUND_Y - 40), (9270, GROUND_Y - 90),
+                   (9410, GROUND_Y - 40), (9450, GROUND_Y - 40)):
+        level.coins.add(cx, cy)
+    level.enemies.append(BasicEnemy(8500, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(BasicEnemy(8970, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(RangedEnemy(9400, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
+    level.enemies.append(FlyingEnemy(8720, GROUND_Y - 190, patrol_range=140))
+    level.add_checkpoint(9500, GROUND_Y - settings.CHECKPOINT_HEIGHT)
+    level.add_story_trigger(8100, "A fumaça cobre a estrada. As defesas do castelo estão cada vez mais próximas.")
+
+    # ---------- Região 7: Muralha exterior (9600 - 11200) ----------
+    plat.add(9600, GROUND_Y, 400, ground_h, is_ground=True)
+    plat.add(10140, GROUND_Y, 360, ground_h, is_ground=True)
+    plat.add(10020, GROUND_Y - 100, 100, 22)
+    plat.add_moving(10480, GROUND_Y - 80, 110, 20, offset_x=100, offset_y=-35, speed=1.5)
+    plat.add(10500, GROUND_Y, 700, ground_h, is_ground=True)
+    plat.add(10720, GROUND_Y - 120, 130, 22)
+    plat.add(10910, GROUND_Y - 190, 120, 22)
+    level.obstacles.add_spike(9710, GROUND_Y - 16, width=64)
+    level.obstacles.add_spike(10640, GROUND_Y - 16, width=80)
+    for cx, cy in ((9650, GROUND_Y - 40), (9690, GROUND_Y - 40),
+                   (10040, GROUND_Y - 140), (10180, GROUND_Y - 40),
+                   (10220, GROUND_Y - 40), (10530, GROUND_Y - 40),
+                   (10750, GROUND_Y - 160), (10940, GROUND_Y - 230),
+                   (11000, GROUND_Y - 40), (11040, GROUND_Y - 40)):
+        level.coins.add(cx, cy)
+    level.enemies.append(BasicEnemy(10200, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(RangedEnemy(10570, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
+    level.enemies.append(FlyingEnemy(10800, GROUND_Y - 220, patrol_range=150))
+    level.add_checkpoint(11100, GROUND_Y - settings.CHECKPOINT_HEIGHT)
+    level.add_story_trigger(9700, "A muralha exterior está em ruínas, mas os guardas ainda protegem o acesso.")
+
+    # ---------- Região 8: Portões do castelo (11200 - 12800) ----------
+    plat.add(11200, GROUND_Y, 300, ground_h, is_ground=True)
+    plat.add(11620, GROUND_Y, 480, ground_h, is_ground=True)
+    plat.add(11780, GROUND_Y - 90, 120, 22)
+    plat.add(11960, GROUND_Y - 155, 120, 22)
+    plat.add(12220, GROUND_Y, 580, ground_h, is_ground=True)
+    plat.add(12380, GROUND_Y - 95, 140, 22)
+    level.obstacles.add_spike(11690, GROUND_Y - 16, width=64)
+    level.obstacles.add_spike(12470, GROUND_Y - 16, width=64)
+    for cx, cy in ((11250, GROUND_Y - 40), (11290, GROUND_Y - 40),
+                   (11790, GROUND_Y - 130), (11980, GROUND_Y - 195),
+                   (12040, GROUND_Y - 40), (12080, GROUND_Y - 40),
+                   (12260, GROUND_Y - 40), (12300, GROUND_Y - 40),
+                   (12400, GROUND_Y - 140), (12550, GROUND_Y - 40),
+                   (12590, GROUND_Y - 40), (12630, GROUND_Y - 40)):
+        level.coins.add(cx, cy)
+    level.enemies.append(BasicEnemy(11700, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(BasicEnemy(12120, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
+    level.enemies.append(RangedEnemy(12400, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
+    level.enemies.append(FlyingEnemy(11900, GROUND_Y - 210, patrol_range=160))
+    level.add_checkpoint(12580, GROUND_Y - settings.CHECKPOINT_HEIGHT)
+    level.add_story_trigger(12400, "As portas do castelo se abrem. Vharok o espera la dentro.")
+    level.boss_trigger = pygame.Rect(12700, GROUND_Y - 200, 40, 200)
+
+    # Background panorâmico em três trechos: deserto (0-6000), transição
+    # (6000-7000) e caverna (7000-12800). Mantém fallback se faltarem assets.
+    if SegmentedWorldBackdrop.available():
+        level.backdrop = SegmentedWorldBackdrop(level_width)
+    elif MundoBackdrop.available():
         level.backdrop = MundoBackdrop(level_width)
     else:
         level.backdrop = VillageBackdrop(level_width, GROUND_Y)
+
 
     return level
 

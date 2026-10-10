@@ -58,7 +58,7 @@ class DebugOverlay:
         pygame.draw.rect(surf, color, r, width=2)
 
     def _draw_hitboxes(self, surf, camera_x, level, player):
-        # Chão, paredes, plataformas móveis/quebradiças - tudo que já
+        # Chão, plataformas móveis/quebradiças - tudo que já
         # entra na checagem de colisão (level.platforms.rects()).
         for r in level.platforms.rects():
             self._draw_rect(surf, camera_x, r, COLOR_PLATFORM)

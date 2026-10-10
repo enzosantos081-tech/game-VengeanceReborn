@@ -36,7 +36,6 @@ const classDiagrams = [
   ['Estados', 'states', 'Representa a máquina de estados e a navegação entre estados do jogo.'],
   ['História', 'story', 'Apresenta o popup de história e seu controle de exibição.'],
   ['Vitória', 'victory', 'Mostra a tela de vitória e as informações finais da partida.'],
-  ['Sentinela de parede', 'wall_sentinel', 'Descreve o inimigo fixo que dispara projéteis a partir da parede.'],
   ].map(([title, name, description]) => ({
     title,
     description,
@@ -71,7 +70,6 @@ const sequenceDiagrams = [
   ['Estados', 'states', 'Transições entre estados e retorno ao estado anterior após a pausa.', 'jpeg'],
   ['História', 'story', 'Exibição temporizada de mensagens com efeitos de entrada e saída.', 'png'],
   ['Vitória', 'victory', 'Apresentação do resultado da partida e retorno ao menu principal.', 'png'],
-  ['Sentinela de parede', 'wall_sentinel', 'Disparo, movimentação de projéteis e interação com o jogador.', 'png'],
 ].map(([title, name, description, extension]) => ({
   title,
   description,

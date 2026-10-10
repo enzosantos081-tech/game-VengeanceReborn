@@ -53,11 +53,8 @@ def _spike_strip(length, thickness):
 
 class Spike:
     def __init__(self, x, y, width=32, height=16, facing="up"):
-        # Espinhos de chão ("up") ficam grudados no topo do chão.
-        # Espinhos de parede ("left"/"right") ficam grudados numa parede
-        # vertical. Espinhos de teto ("down") pendem de cima (ex:
-        # estalactites). Todas as orientações são suportadas de forma
-        # genérica, mesmo que não estejam todas em uso no momento.
+        # Espinhos de chão ("up") ficam no topo do chão; os de teto
+        # ("down") pendem de cima, como estalactites fixas.
         self.rect = pygame.Rect(x, y, width, height)
         self.facing = facing
 
@@ -72,17 +69,9 @@ class Spike:
         if self.facing == "up":
             strip, m = _spike_strip(r.width, r.height)
             surface.blit(strip, (r.x - m, r.bottom + SPIKE_SINK - strip.get_height()))
-        elif self.facing == "down":
+        else:
             strip, m = _spike_strip(r.width, r.height)
             surface.blit(pygame.transform.flip(strip, False, True), (r.x - m, r.y - SPIKE_SINK))
-        elif self.facing == "right":   # parede à esquerda, pontas pra direita
-            strip, m = _spike_strip(r.height, r.width)
-            img = pygame.transform.rotate(strip, -90)
-            surface.blit(img, (r.x - SPIKE_SINK, r.y - m))
-        else:                          # "left": parede à direita, pontas pra esquerda
-            strip, m = _spike_strip(r.height, r.width)
-            img = pygame.transform.rotate(strip, 90)
-            surface.blit(img, (r.right + SPIKE_SINK - img.get_width(), r.y - m))
         return True
 
     def draw(self, surface, camera_x):
@@ -91,30 +80,17 @@ class Spike:
             return
         if self._draw_sprite(surface, r):
             return
-        if self.facing in ("up", "down"):
-            # Fileira de triângulos apontando para cima (chão) ou para
-            # baixo (teto/estalactite) - mesma lógica, só inverte o eixo Y.
-            n = max(1, r.width // 16)
-            seg_w = r.width / n
-            for i in range(n):
-                x0 = r.x + i * seg_w
-                if self.facing == "up":
-                    points = [(x0, r.bottom), (x0 + seg_w / 2, r.top), (x0 + seg_w, r.bottom)]
-                else:
-                    points = [(x0, r.top), (x0 + seg_w / 2, r.bottom), (x0 + seg_w, r.top)]
-                pygame.draw.polygon(surface, settings.COLOR_SPIKE, points)
-        else:
-            # Fileira de triângulos apontando para o lado (grudados numa parede)
-            n = max(1, r.height // 16)
-            seg_h = r.height / n
-            for i in range(n):
-                y0 = r.y + i * seg_h
-                if self.facing == "right":
-                    # parede fica à esquerda do vão; espinhos apontam p/ direita
-                    points = [(r.left, y0), (r.right, y0 + seg_h / 2), (r.left, y0 + seg_h)]
-                else:  # "left": parede fica à direita do vão; espinhos apontam p/ esquerda
-                    points = [(r.right, y0), (r.left, y0 + seg_h / 2), (r.right, y0 + seg_h)]
-                pygame.draw.polygon(surface, settings.COLOR_SPIKE, points)
+        # Fileira de triângulos apontando para cima (chão) ou para baixo
+        # (teto/estalactites), sem orientações laterais associadas a paredes.
+        n = max(1, r.width // 16)
+        seg_w = r.width / n
+        for i in range(n):
+            x0 = r.x + i * seg_w
+            if self.facing == "up":
+                points = [(x0, r.bottom), (x0 + seg_w / 2, r.top), (x0 + seg_w, r.bottom)]
+            else:
+                points = [(x0, r.top), (x0 + seg_w / 2, r.bottom), (x0 + seg_w, r.top)]
+            pygame.draw.polygon(surface, settings.COLOR_SPIKE, points)
 
 
 class Stalactite:
@@ -206,14 +182,6 @@ class ObstacleGroup:
 
     def add_spike(self, x, y, width=32, height=16):
         s = Spike(x, y, width, height, facing="up")
-        self.spikes.append(s)
-        return s
-
-    def add_wall_spike(self, x, y, width, height, facing):
-        """Espinhos grudados numa parede vertical. facing='right' se a
-        parede fica à ESQUERDA do vão (espinhos apontam p/ direita);
-        facing='left' se a parede fica à DIREITA do vão."""
-        s = Spike(x, y, width, height, facing=facing)
         self.spikes.append(s)
         return s
 

@@ -43,6 +43,7 @@ class Game:
         pygame.SCALED | pygame.FULLSCREEN,)
         self.world_surface = pygame.Surface((settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
+        self.frame_dt_ms = 1000.0 / settings.FPS
 
         self.states = StateMachine(settings.STATE_MENU)
         self.input = InputManager()
@@ -146,6 +147,7 @@ class Game:
             self._draw()
             self.input.end_frame()
             self.clock.tick(settings.FPS)
+            self.frame_dt_ms = self.clock.get_time()
         pygame.quit()
         sys.exit()
 
@@ -211,7 +213,7 @@ class Game:
         # em cima delas (world/level.py -> move_and_collide) use o
         # deslocamento deste mesmo frame (ver comentário lá).
         self.level.update_platforms()
-        self.player.update(self.level)
+        self.player.update(self.level, self.frame_dt_ms)
 
         if self.player.just_jumped:
             self.audio.play("jump")
@@ -237,7 +239,9 @@ class Game:
             self.audio.play("coin")
 
         all_targets = self.level.living_enemies() + ([self.level.boss] if self.level.boss and self.level.boss.alive else [])
-        hit_ids, coins_awarded = resolve_player_attack(self.player, all_targets, self.particles)
+        hit_ids, coins_awarded = resolve_player_attack(
+            self.player, all_targets, self.particles,
+        )
         if hit_ids:
             self.audio.play("hit")
         if coins_awarded:
@@ -248,6 +252,9 @@ class Game:
             if self.level.boss.attack_triggered_this_frame == "slam":
                 self.audio.play("boss_slam")
                 self.trigger_shake(8, 16)
+            elif self.level.boss.attack_triggered_this_frame == "melee":
+                self.audio.play("boss_slam")   # golpe curto: mesmo som do slam, tremor menor
+                self.trigger_shake(4, 8)
             else:
                 self.audio.play("boss_barrage")
                 self.trigger_shake(3, 8)
@@ -303,15 +310,39 @@ class Game:
         if self.input.pause_pressed():
             self.states.change(settings.STATE_PLAYING)
             return
+
+        if self.input.left_pressed():
+            self.shop.switch_tab(-1)
+            self.audio.play("menu_move")
+        elif self.input.right_pressed():
+            self.shop.switch_tab(1)
+            self.audio.play("menu_move")
+
         if self.input.down_pressed():
             self.shop.move_selection(1)
             self.audio.play("menu_move")
-        if self.input.up_pressed():
+        elif self.input.up_pressed():
             self.shop.move_selection(-1)
             self.audio.play("menu_move")
-        if self.input.interact_pressed() or self.input.confirm_pressed():
+
+        # F aprimora a espada selecionada; ENTER/E compra ou equipa.
+        if self.input.is_pressed(pygame.K_f):
+            success = self.shop.upgrade_selected(self.player)
+            self.audio.play("purchase" if success else "denied")
+            if success:
+                save.save_game(self.player.stats)
+        elif self.input.interact_pressed() or self.input.confirm_pressed():
             success = self.shop.purchase_selected(self.player)
             self.audio.play("purchase" if success else "denied")
+            if success:
+                save.save_game(self.player.stats)
+
+        if self.input.mouse_pressed(1):
+            result = self.hud.handle_shop_click(pygame.mouse.get_pos(), self.player, self.shop)
+            if result is not None:
+                self.audio.play("purchase" if result else "denied")
+                if result:
+                    save.save_game(self.player.stats)
 
     def _update_pause(self):
         if self.input.pause_pressed():

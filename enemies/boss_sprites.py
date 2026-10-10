@@ -86,6 +86,7 @@ TINTS = {
     "hit": (200, 200, 200),          # acerto do jogador (antes: corpo todo branco)
     "tele_slam": (80, 55, 0),        # telegraph do slam (antes: retângulo amarelo piscando)
     "tele_barrage": (70, 0, 95),     # telegraph da rajada (antes: retângulo roxo piscando)
+    "tele_charge": (0, 65, 85),      # telegraph da investida (azul-ciano, distinto do slam e da rajada)
     "rage": (34, 0, 6),              # Fase 2: armadura avermelhada
     "rage_flash": (170, 30, 25),     # pisca ao entrar na Fase 2
 }

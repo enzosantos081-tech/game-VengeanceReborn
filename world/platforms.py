@@ -205,12 +205,9 @@ def _draw_slab_sprite(surface, r, name, tint=None):
 class Platform:
     """Plataforma estática (chão ou bloco fixo)."""
 
-    def __init__(self, x, y, width, height, is_ground=False, color_override=None, kind=None):
+    def __init__(self, x, y, width, height, is_ground=False, color_override=None):
         self.rect = pygame.Rect(x, y, width, height)
         self.is_ground = is_ground
-        # kind: None (plataforma/chão normal) ou "wall_low" / "wall_high"
-        # (só muda o visual; a colisão é sempre o rect).
-        self.kind = kind
         # Preenchidos por PlatformGroup: trecho de chão colado em outro
         # (sem ponta arredondada nesse lado).
         self.joins_left = False
@@ -244,27 +241,9 @@ class Platform:
         _blit_visible(surface, slab, (r.x, slab_y))
         return True
 
-    def _draw_wall(self, surface, r):
-        base = _load(self.kind)
-        if base is None:
-            return False
-        scale = r.height / base.get_height()
-        sw = max(1, round(base.get_width() * scale))
-        img = _scaled(self.kind, (sw, r.height))
-        if r.width <= sw:  # parede mais fina que o sprite: corta igual dos dois lados
-            surface.blit(img, r.topleft, pygame.Rect((sw - r.width) // 2, 0, r.width, r.height))
-        else:              # parede mais larga: repete o sprite espelhado
-            key = ("wall", self.kind, r.width, r.height)
-            if key not in _strip_cache:
-                _strip_cache[key] = _mirror_fill(img, r.width, r.height, 0)
-            surface.blit(_strip_cache[key], r.topleft)
-        return True
-
     def _draw_sprite(self, surface, r):
         if self.is_ground:
             return self._draw_ground(surface, r)
-        if self.kind in ("wall_low", "wall_high"):
-            return self._draw_wall(surface, r)
         if self.color_override:
             return False
         return _draw_slab_sprite(surface, r, "platform_static")
@@ -406,15 +385,6 @@ class PlatformGroup:
 
     def add(self, x, y, width, height, is_ground=False, color_override=None):
         p = Platform(x, y, width, height, is_ground, color_override=color_override)
-        self.platforms.append(p)
-        return p
-
-    def add_wall(self, x, y, width, height, tall=None):
-        """Parede (sólida como qualquer plataforma). 'tall' escolhe o sprite:
-        wall_high (alta) ou wall_low (baixa); None decide pela altura."""
-        if tall is None:
-            tall = height >= 160
-        p = Platform(x, y, width, height, kind="wall_high" if tall else "wall_low")
         self.platforms.append(p)
         return p
 

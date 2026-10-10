@@ -61,17 +61,13 @@ KNOCKBACK_X = 6
 KNOCKBACK_Y = -6
 
 # ---------- Dash (tecla Q) ----------
-DASH_SPEED = 13.0
-DASH_DURATION_FRAMES = 10        # duração do impulso (sem gravidade)
-DASH_COOLDOWN_FRAMES = 45
-DASH_INVULN_FRAMES = 12          # i-frames concedidos durante o dash
+# Velocidade em pixels por segundo; duração e recarga usam milissegundos.
+# Antes: 13 px/frame por 10 frames (~130 px em 167 ms) e recarga de 45 frames.
+DASH_SPEED = 600.0
+DASH_DURATION_MS = 180           # ~108 px a 60 FPS, com início/fim definidos
+DASH_COOLDOWN_MS = 1000           # recarga de 1 s após gastar a carga
+DASH_INVULN_FRAMES = 12           # mantém os i-frames existentes
 COLOR_DASH_TRAIL = (210, 225, 255)
-
-# ---------- Wall slide / wall jump ----------
-WALL_SLIDE_MAX_FALL_SPEED = 2.5  # queda é freada até essa velocidade ao deslizar na parede
-WALL_JUMP_FORCE_X = 6.5          # impulso horizontal para longe da parede
-WALL_JUMP_FORCE_Y = -15.0
-WALL_JUMP_LOCK_FRAMES = 10       # frames em que o input horizontal é ignorado, pra garantir o afastamento da parede
 
 # ---------- Pulo duplo (melhoria da loja) ----------
 UPGRADE_DOUBLE_JUMP_COST = 40
@@ -82,11 +78,9 @@ SHOP_HEAL_AMOUNT = 25       # cura 1/4 da vida base por compra
 
 # ---------- Ímã de moedas (melhoria da loja) ----------
 UPGRADE_MAGNET_COST = 35
-COIN_MAGNET_RADIUS = 110
+COIN_MAGNET_RADIUS = 130
 COIN_MAGNET_PULL_SPEED = 6.5
 
-# ---------- Carga extra de dash (melhoria da loja) ----------
-UPGRADE_DASH_CHARGE_COST = 45
 
 # ---------- Recompensas e respawn de inimigos ----------
 ENEMY_COIN_DROP_BASIC = 10
@@ -133,6 +127,22 @@ BASIC_ENEMY_SPEED = 1.6
 BASIC_ENEMY_HEALTH = 2
 BASIC_ENEMY_DAMAGE = 10
 BASIC_ENEMY_PATROL_RANGE = 90
+BASIC_ENEMY_SPRITE_HEIGHT = 62       # altura visual; hitbox continua 32x32
+BASIC_ENEMY_WALK_FRAME_TICKS = 7     # frames de jogo por quadro da caminhada
+BASIC_ENEMY_IDLE_FRAME_TICKS = 12    # frames de jogo por quadro parado
+BASIC_ENEMY_DETECTION_RANGE = 155   # distância entre hitboxes para perceber Kael
+BASIC_ENEMY_PURSUIT_RANGE = 220    # distância máxima entre hitboxes antes de desistir
+BASIC_ENEMY_DETECTION_LEASH = 45   # mantido por compatibilidade com configurações antigas
+BASIC_ENEMY_ATTACK_RANGE = 30      # alcance curto, medido à frente da hitbox física
+BASIC_ENEMY_ATTACK_FRAME_TICKS = 6 # duração de cada quadro da animação de ataque
+BASIC_ENEMY_ATTACK_IMPACT_FRAME = 3 # quadro em que a lâmina atinge a área de golpe
+BASIC_ENEMY_ATTACK_COOLDOWN = 72   # recuperação após o golpe (frames a 60 FPS)
+# Avanço durante o golpe: o inimigo dá um passo curto na direção de Kael enquanto
+# prepara o ataque (quadros ADVANCE_START_FRAME até o quadro de impacto, exclusivo).
+BASIC_ENEMY_ATTACK_ADVANCE_SPEED = 3.0         # px/frame (patrulha/perseguição: 1.6)
+BASIC_ENEMY_ATTACK_ADVANCE_MAX_DISTANCE = 36   # avanço total máximo por golpe (px, ~1 largura do corpo)
+BASIC_ENEMY_ATTACK_ADVANCE_START_FRAME = 1     # quadro da animação em que o passo começa (0 = só antecipação)
+BASIC_ENEMY_ATTACK_ADVANCE_STOP_GAP = 10       # para de avançar a esta distância entre hitboxes (nunca encosta/ultrapassa Kael)
 
 RANGED_ENEMY_WIDTH = 30
 RANGED_ENEMY_HEIGHT = 34
@@ -140,7 +150,13 @@ RANGED_ENEMY_HEALTH = 2
 RANGED_ENEMY_DAMAGE = 10
 RANGED_ENEMY_RANGE = 320
 RANGED_ENEMY_COOLDOWN = 90
-PROJECTILE_SPEED = 6
+RANGED_ENEMY_SPRITE_HEIGHT = 54       # altura visual; hitbox física permanece 30x34
+RANGED_ENEMY_IDLE_FRAME_TICKS = 12
+RANGED_ENEMY_CAST_FRAME_TICKS = 6
+RANGED_ENEMY_RELEASE_FRAME = 4        # solta a magia no quadro de lançamento
+RANGED_ENEMY_PROJECTILE_VISUAL_SIZE = 22  # visual maior; hitbox continua 8x8
+RANGED_ENEMY_AIM_MIN_DISTANCE = 4     # se Kael estiver quase no ponto de origem, atira na horizontal em vez de normalizar um vetor ~zero
+PROJECTILE_SPEED = 6          # velocidade total (px/frame), igual em qualquer ângulo de disparo
 PROJECTILE_SIZE = 8
 
 # ---------- Boss ----------
@@ -159,6 +175,31 @@ BOSS_BARRAGE_PROJECTILE_SPEED = 10
 BOSS_BARRAGE_TELEGRAPH = 45
 BOSS_CHASE_STOP_DISTANCE = 70
 
+# Investida ofensiva (dash em direção a Kael). Tempos em frames (60 FPS).
+BOSS_CHARGE_CHANCE = 0.35             # chance de escolher a investida a cada ataque, quando fora do intervalo mínimo
+BOSS_CHARGE_COOLDOWN = 360            # intervalo MÍNIMO entre investidas (6 s), contado a partir do fim da anterior
+BOSS_CHARGE_FIRST_DELAY = 180         # espera inicial antes da 1a investida possível (3 s)
+BOSS_CHARGE_MIN_DISTANCE = 240        # só investe se Kael estiver pelo menos tão longe (px, horizontal entre centros); mais perto o slam já cobre
+BOSS_CHARGE_TELEGRAPH = 32            # preparação (aviso visual; hiper-armadura como nos outros telegraphs)
+BOSS_CHARGE_SPEED = 8.0               # px/frame (caminhada: 2.2, ou 3.08 na Fase 2)
+BOSS_CHARGE_MAX_FRAMES = 48           # duração máxima do avanço
+BOSS_CHARGE_MAX_DISTANCE = 360        # distância máxima percorrida (px); o que vier primeiro encerra
+BOSS_CHARGE_RECOVER = 55              # recuperação após a investida (frames; Vharok fica exposto)
+BOSS_CHARGE_PHASE2_SPEED_MULT = 1.15  # ajuste moderado na Fase 2
+BOSS_CHARGE_PHASE2_COOLDOWN_MULT = 0.85
+BOSS_CHARGE_FRAME_TICKS = 3           # frames de jogo por quadro da animação durante a investida (só visual)
+
+# Golpe de curta distância (reação de Vharok a Kael "encostado"). Tempos em frames (60 FPS).
+# Vharok para de perseguir a BOSS_CHASE_STOP_DISTANCE (70); o golpe cobre essa faixa e pouco além.
+BOSS_MELEE_TRIGGER_DISTANCE = 90      # distância HORIZONTAL entre centros para ativar o golpe (px)
+BOSS_MELEE_REACH = 30                 # alcance da hitbox À FRENTE da borda do corpo (px); bem menor que o slam (130 a partir do centro)
+BOSS_MELEE_TOP_MARGIN = 12            # px do topo do corpo (coroa) ignorados na checagem de altura e na hitbox
+BOSS_MELEE_WINDUP_FRAMES = 16         # aviso (braços erguidos + zona de perigo); Kael ainda se afasta/usa dash a tempo
+BOSS_MELEE_ACTIVE_FRAMES = 8          # janela em que a hitbox existe (dano no máximo UMA vez por golpe)
+BOSS_MELEE_RECOVER_FRAMES = 24        # recuperação após o golpe, antes de voltar à perseguição
+BOSS_MELEE_COOLDOWN = 100             # intervalo MÍNIMO entre golpes (~1,7 s), contado a partir do fim do anterior
+BOSS_MELEE_PHASE2_COOLDOWN_MULT = 0.85
+
 # Visual do Boss (enemies/boss_sprites.py). Puramente cosmético: não altera
 # BOSS_WIDTH/BOSS_HEIGHT nem nenhuma colisão.
 BOSS_SPRITE_SCALE = 1.5               # escala do corpo e das ondas de choque (a onda larga fica ~ do tamanho da área do slam)
@@ -173,14 +214,7 @@ BOSS_PHASE2_FLASH_FRAMES = 48         # pisca vermelho ao entrar na Fase 2 (só 
 # ---------- Economia / Progressão ----------
 COIN_VALUE = 1
 UPGRADE_HEALTH_COST = 10
-UPGRADE_DAMAGE_COST = 15
-UPGRADE_JUMP_COST = 20
 UPGRADE_HEALTH_AMOUNT = 20   # por nível (5 níveis = +100 de vida máxima)
-UPGRADE_DAMAGE_AMOUNT = 1
-UPGRADE_JUMP_AMOUNT = 1.5
-UPGRADE_ATTACK_SPEED_COST = 18
-UPGRADE_ATTACK_SPEED_AMOUNT = 2   # reduz frames de cooldown por nível
-MIN_ATTACK_COOLDOWN = 8
 MAX_UPGRADE_LEVEL = 5
 
 # ---------- Áudio (gerado proceduralmente, sem arquivos externos) ----------
