@@ -155,7 +155,7 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+            elif event.type == pygame.KEYDOWN and event.key in (pygame.K_F11, pygame.K_l):
                 pygame.display.toggle_fullscreen()
             else:
                 self.input.handle_event(event)
