@@ -221,6 +221,21 @@ MAX_UPGRADE_LEVEL = 5
 AUDIO_SAMPLE_RATE = 44100
 MASTER_VOLUME = 0.35
 
+# ---------- Música de fundo (arquivos em assets/sounds/) ----------
+# "level" toca na fase inicial; "boss" toca na arena do Vharok.
+MUSIC_FILES = {
+    "level": "background_padrao.mp3",
+    "boss": "finalboss_music.wav",
+}
+MUSIC_VOLUME = 0.4              # volume da música (0.0 a 1.0); os efeitos usam MASTER_VOLUME
+MUSIC_FADE_MS = 800             # fade-in ao começar uma música
+# Loop sem "buraco": o silêncio no começo/fim do arquivo é cortado ao carregar
+# (o mp3 da fase tem ~0,5 s no início e ~1,3 s no fim, o que causava uma pausa
+# a cada volta). Amplitude (0-32767) abaixo da qual conta como silêncio:
+MUSIC_TRIM_THRESHOLD = 100
+MUSIC_TRIM_MIN_MS = 20          # só corta um lado se tiver pelo menos esse silêncio
+MUSIC_LOOP_FADE_MS = 8          # micro fade nas pontas cortadas, evita "clique" na emenda
+
 # ---------- Screen shake ----------
 SHAKE_DECAY = 0.85
 

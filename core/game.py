@@ -24,7 +24,7 @@ from systems.combat import resolve_player_attack
 from systems.respawn import RespawnSystem
 from systems.shop import Shop
 from systems.particles import ParticleSystem
-from systems.audio import SoundManager
+from systems.audio import SoundManager, MusicManager
 
 from screens.menu import MenuScreen
 from screens.hud import HUD
@@ -48,6 +48,7 @@ class Game:
         self.states = StateMachine(settings.STATE_MENU)
         self.input = InputManager()
         self.audio = SoundManager()
+        self.music = MusicManager()
 
         self.menu_screen = MenuScreen()
         self.hud = HUD()
@@ -113,6 +114,7 @@ class Game:
         self._victory_sound_played = False
         self.shake_timer = 0
         self.shake_magnitude = 0.0
+        self.music.play("level")
         self.states.change(settings.STATE_PLAYING)
 
     def enter_boss_level(self):
@@ -125,6 +127,7 @@ class Game:
         self.camera_x = 0
         self.particles = ParticleSystem()
         self._prev_on_ground = False
+        self.music.play("boss")
 
     def restart_attempt(self):
         """Usado pelo menu de pausa: volta ao último ponto do Núcleo/
@@ -134,6 +137,7 @@ class Game:
         self.states.change(settings.STATE_PLAYING)
 
     def return_to_menu(self):
+        self.music.stop()
         save.delete_save()
         self.states.change(settings.STATE_MENU)
         self.level = None
@@ -301,6 +305,7 @@ class Game:
         if self.level.boss and not self.level.boss.alive:
             save.save_game(self.player.stats)
             self._victory_sound_played = False
+            self.music.stop()
             self.states.change(settings.STATE_VICTORY)
             return
 
