@@ -1,0 +1,103 @@
+.page {
+  min-height: calc(100vh - 60px);
+  padding: 4rem 0 5rem;
+  background:
+    linear-gradient(115deg, rgba(48, 82, 130, 0.11), transparent 44%),
+    linear-gradient(285deg, rgba(135, 42, 46, 0.08), transparent 42%),
+    var(--ifm-background-color);
+}
+
+.header {
+  max-width: 760px;
+  margin: 0 auto 2.5rem;
+  text-align: center;
+}
+
+.eyebrow {
+  margin-bottom: 0.75rem;
+  color: #e16a58;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.header h1 {
+  margin-bottom: 0.75rem;
+}
+
+.lede {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.1rem;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 12px;
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.imageLink {
+  display: block;
+  overflow: hidden;
+  background: #080b11;
+}
+
+.imageLink img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: transform 180ms ease;
+}
+
+.imageLink:hover img,
+.imageLink:focus-visible img {
+  transform: scale(1.025);
+}
+
+.caption {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  gap: 0.8rem;
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.number {
+  color: #e16a58;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.caption h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.2rem;
+}
+
+.caption p {
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+@media screen and (max-width: 700px) {
+  .page {
+    padding: 2.5rem 0 3.5rem;
+  }
+
+  .header {
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+
+  .lede {
+    font-size: 1rem;
+  }
+}

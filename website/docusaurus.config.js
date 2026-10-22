@@ -98,6 +98,7 @@ const config = {
           },
           {to: '/regras', label: 'Regras', position: 'left'},
           {to: '/historia', label: 'História', position: 'left'},
+          {to: '/imagens-do-jogo', label: 'Imagens do jogo', position: 'left'},
           {to: '/diagramas-uml', label: 'Diagramas UML', position: 'left'},
           {to: '/blog', label: 'Blog', position: 'right'},
         ],
@@ -114,6 +115,7 @@ const config = {
               },
               {label: 'Regras', to: '/regras'},
               {label: 'História', to: '/historia'},
+              {label: 'Imagens do jogo', to: '/imagens-do-jogo'},
             ],
           },
           {
