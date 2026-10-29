@@ -249,7 +249,7 @@ MAX_UPGRADE_LEVEL = 5
 
 # ---------- Áudio (gerado proceduralmente, sem arquivos externos) ----------
 AUDIO_SAMPLE_RATE = 44100
-MASTER_VOLUME = 0.35
+MASTER_VOLUME = 0.16
 
 # ---------- Música de fundo (arquivos em assets/sounds/) ----------
 # "level" toca na fase inicial; "boss" toca na arena do Vharok.
@@ -257,7 +257,7 @@ MUSIC_FILES = {
     "level": "background_padrao.mp3",
     "boss": "finalboss_music.wav",
 }
-MUSIC_VOLUME = 0.4              # volume da música (0.0 a 1.0); os efeitos usam MASTER_VOLUME
+MUSIC_VOLUME = 0.30              # volume da música (0.0 a 1.0); os efeitos usam MASTER_VOLUME
 MUSIC_FADE_MS = 800             # fade-in ao começar uma música
 # Loop sem "buraco": o silêncio no começo/fim do arquivo é cortado ao carregar
 # (o mp3 da fase tem ~0,5 s no início e ~1,3 s no fim, o que causava uma pausa

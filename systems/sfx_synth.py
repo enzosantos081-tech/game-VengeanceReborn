@@ -511,7 +511,7 @@ def _dash(v):
     return m.out()
 
 
-@sound("dash_ready", 0.30, 1)
+@sound("dash_ready", 0.25, 1)
 def _dash_ready(v):
     m = Mix(0.3)
     m.add(bell(1318.5, 0.22, tau=0.05, partials=((1, 1, 1), (2.0, 0.3, 0.6))), 0.0, 0.6, -0.2)

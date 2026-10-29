@@ -144,8 +144,7 @@ class AudioDirector:
         if player.just_attacked:
             sword = player.stats.equipped_sword_id
             a.play("attack_%s" % sword if sword else "attack_base")
-        if player.just_dashed:
-            a.play("dash")
+
 
         # Pouso: leve em saltos comuns, pesado em quedas longas
         if player.on_ground:

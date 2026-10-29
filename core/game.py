@@ -242,6 +242,8 @@ class Game:
         self._prev_health = self.player.health
         self.sfx.begin_frame(self.player)
         self.player.handle_input(self.input, self.camera_x)
+        if self.player.just_dashed:
+            self.audio.play("dash")
         # Plataformas móveis avançam antes do jogador, para que o "colamento"
         # em cima delas (world/level.py -> move_and_collide) use o
         # deslocamento deste mesmo frame (ver comentário lá).
