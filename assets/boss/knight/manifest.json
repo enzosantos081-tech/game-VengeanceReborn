@@ -1,0 +1,507 @@
+{
+ "frames": {
+  "burst_0": {
+   "ax": 50,
+   "ay": 128,
+   "file": "burst_0.png",
+   "h": 128,
+   "w": 107
+  },
+  "burst_1": {
+   "ax": 75,
+   "ay": 128,
+   "file": "burst_1.png",
+   "h": 128,
+   "w": 159
+  },
+  "burst_2": {
+   "ax": 47,
+   "ay": 129,
+   "file": "burst_2.png",
+   "h": 129,
+   "w": 105
+  },
+  "burst_3": {
+   "ax": 52,
+   "ay": 128,
+   "file": "burst_3.png",
+   "h": 128,
+   "w": 115
+  },
+  "burst_4": {
+   "ax": 57,
+   "ay": 130,
+   "file": "burst_4.png",
+   "h": 130,
+   "w": 120
+  },
+  "burst_5": {
+   "ax": 58,
+   "ay": 129,
+   "file": "burst_5.png",
+   "h": 129,
+   "w": 134
+  },
+  "burst_6": {
+   "ax": 52,
+   "ay": 130,
+   "file": "burst_6.png",
+   "h": 130,
+   "w": 111
+  },
+  "chg_0": {
+   "ax": 48,
+   "ay": 130,
+   "file": "chg_0.png",
+   "h": 130,
+   "w": 106
+  },
+  "chg_1": {
+   "ax": 59,
+   "ay": 113,
+   "file": "chg_1.png",
+   "h": 113,
+   "w": 108
+  },
+  "chg_2": {
+   "ax": 100,
+   "ay": 105,
+   "file": "chg_2.png",
+   "h": 106,
+   "w": 165
+  },
+  "chg_3": {
+   "ax": 140,
+   "ay": 115,
+   "file": "chg_3.png",
+   "h": 116,
+   "w": 218
+  },
+  "chg_4": {
+   "ax": 71,
+   "ay": 120,
+   "file": "chg_4.png",
+   "h": 121,
+   "w": 135
+  },
+  "chg_5": {
+   "ax": 71,
+   "ay": 117,
+   "file": "chg_5.png",
+   "h": 119,
+   "w": 140
+  },
+  "chg_6": {
+   "ax": 67,
+   "ay": 121,
+   "file": "chg_6.png",
+   "h": 124,
+   "w": 168
+  },
+  "chg_7": {
+   "ax": 77,
+   "ay": 131,
+   "file": "chg_7.png",
+   "h": 132,
+   "w": 155
+  },
+  "fx_embers": {
+   "ax": 28,
+   "ay": 53,
+   "file": "fx_embers.png",
+   "h": 53,
+   "w": 56
+  },
+  "fx_erupt_0": {
+   "ax": 30,
+   "ay": 51,
+   "file": "fx_erupt_0.png",
+   "h": 51,
+   "w": 60
+  },
+  "fx_erupt_1": {
+   "ax": 37,
+   "ay": 61,
+   "file": "fx_erupt_1.png",
+   "h": 61,
+   "w": 74
+  },
+  "fx_flame": {
+   "ax": 15,
+   "ay": 37,
+   "file": "fx_flame.png",
+   "h": 37,
+   "w": 30
+  },
+  "fx_grow_0": {
+   "ax": 10,
+   "ay": 10,
+   "file": "fx_grow_0.png",
+   "h": 20,
+   "w": 20
+  },
+  "fx_grow_1": {
+   "ax": 16,
+   "ay": 16,
+   "file": "fx_grow_1.png",
+   "h": 32,
+   "w": 31
+  },
+  "fx_grow_2": {
+   "ax": 20,
+   "ay": 21,
+   "file": "fx_grow_2.png",
+   "h": 42,
+   "w": 40
+  },
+  "fx_grow_3": {
+   "ax": 29,
+   "ay": 31,
+   "file": "fx_grow_3.png",
+   "h": 63,
+   "w": 58
+  },
+  "fx_puff_0": {
+   "ax": 17,
+   "ay": 16,
+   "file": "fx_puff_0.png",
+   "h": 33,
+   "w": 34
+  },
+  "fx_puff_1": {
+   "ax": 28,
+   "ay": 26,
+   "file": "fx_puff_1.png",
+   "h": 51,
+   "w": 56
+  },
+  "fx_shard_0": {
+   "ax": 8,
+   "ay": 21,
+   "file": "fx_shard_0.png",
+   "h": 42,
+   "w": 16
+  },
+  "fx_shard_1": {
+   "ax": 20,
+   "ay": 8,
+   "file": "fx_shard_1.png",
+   "h": 16,
+   "w": 40
+  },
+  "fx_shard_2": {
+   "ax": 8,
+   "ay": 21,
+   "file": "fx_shard_2.png",
+   "h": 42,
+   "w": 17
+  },
+  "fx_shard_3": {
+   "ax": 20,
+   "ay": 8,
+   "file": "fx_shard_3.png",
+   "h": 16,
+   "w": 40
+  },
+  "fx_star_0": {
+   "ax": 11,
+   "ay": 11,
+   "file": "fx_star_0.png",
+   "h": 22,
+   "w": 21
+  },
+  "fx_star_1": {
+   "ax": 18,
+   "ay": 20,
+   "file": "fx_star_1.png",
+   "h": 39,
+   "w": 35
+  },
+  "fx_star_2": {
+   "ax": 24,
+   "ay": 27,
+   "file": "fx_star_2.png",
+   "h": 55,
+   "w": 48
+  },
+  "gexp_0": {
+   "ax": 49,
+   "ay": 127,
+   "file": "gexp_0.png",
+   "h": 129,
+   "w": 108
+  },
+  "gexp_1": {
+   "ax": 50,
+   "ay": 118,
+   "file": "gexp_1.png",
+   "h": 118,
+   "w": 116
+  },
+  "gexp_2": {
+   "ax": 72,
+   "ay": 111,
+   "file": "gexp_2.png",
+   "h": 121,
+   "w": 140
+  },
+  "gexp_3": {
+   "ax": 73,
+   "ay": 104,
+   "file": "gexp_3.png",
+   "h": 120,
+   "w": 148
+  },
+  "gexp_4": {
+   "ax": 49,
+   "ay": 126,
+   "file": "gexp_4.png",
+   "h": 127,
+   "w": 107
+  },
+  "gexp_5": {
+   "ax": 91,
+   "ay": 115,
+   "file": "gexp_5.png",
+   "h": 130,
+   "w": 198
+  },
+  "gexp_6": {
+   "ax": 107,
+   "ay": 103,
+   "file": "gexp_6.png",
+   "h": 120,
+   "w": 243
+  },
+  "orb_0": {
+   "ax": 50,
+   "ay": 125,
+   "file": "orb_0.png",
+   "h": 126,
+   "w": 109
+  },
+  "orb_1": {
+   "ax": 54,
+   "ay": 125,
+   "file": "orb_1.png",
+   "h": 126,
+   "w": 112
+  },
+  "orb_2": {
+   "ax": 71,
+   "ay": 125,
+   "file": "orb_2.png",
+   "h": 126,
+   "w": 100
+  },
+  "orb_3": {
+   "ax": 64,
+   "ay": 125,
+   "file": "orb_3.png",
+   "h": 126,
+   "w": 129
+  },
+  "orb_4": {
+   "ax": 50,
+   "ay": 125,
+   "file": "orb_4.png",
+   "h": 126,
+   "w": 110
+  },
+  "orb_5": {
+   "ax": 59,
+   "ay": 137,
+   "file": "orb_5.png",
+   "h": 137,
+   "w": 171
+  },
+  "orb_6": {
+   "ax": 55,
+   "ay": 135,
+   "file": "orb_6.png",
+   "h": 135,
+   "w": 156
+  },
+  "orb_7": {
+   "ax": 51,
+   "ay": 141,
+   "file": "orb_7.png",
+   "h": 141,
+   "w": 114
+  },
+  "orb_round": {
+   "ax": 34,
+   "ay": 25,
+   "dx_from_body": 97.9,
+   "dy_from_feet": -77.5,
+   "file": "orb_round.png",
+   "h": 51,
+   "w": 68
+  },
+  "orb_trail": {
+   "ax": 31,
+   "ay": 24,
+   "dx_from_body": 121.5,
+   "dy_from_feet": -84.7,
+   "file": "orb_trail.png",
+   "h": 50,
+   "w": 63
+  },
+  "punch_0": {
+   "ax": 44,
+   "ay": 139,
+   "file": "punch_0.png",
+   "h": 140,
+   "w": 100
+  },
+  "punch_1": {
+   "ax": 51,
+   "ay": 139,
+   "file": "punch_1.png",
+   "h": 140,
+   "w": 105
+  },
+  "punch_2": {
+   "ax": 54,
+   "ay": 138,
+   "file": "punch_2.png",
+   "h": 138,
+   "w": 128
+  },
+  "punch_3": {
+   "ax": 78,
+   "ay": 137,
+   "file": "punch_3.png",
+   "h": 138,
+   "w": 173
+  },
+  "punch_4": {
+   "ax": 39,
+   "ay": 139,
+   "file": "punch_4.png",
+   "h": 140,
+   "w": 93
+  },
+  "smash_0": {
+   "ax": 46,
+   "ay": 137,
+   "file": "smash_0.png",
+   "h": 137,
+   "w": 100
+  },
+  "smash_1": {
+   "ax": 36,
+   "ay": 164,
+   "file": "smash_1.png",
+   "h": 164,
+   "w": 74
+  },
+  "smash_2": {
+   "ax": 37,
+   "ay": 174,
+   "file": "smash_2.png",
+   "h": 175,
+   "w": 78
+  },
+  "smash_3": {
+   "ax": 51,
+   "ay": 113,
+   "file": "smash_3.png",
+   "h": 117,
+   "w": 93
+  },
+  "smash_4": {
+   "ax": 35,
+   "ay": 113,
+   "file": "smash_4.png",
+   "h": 117,
+   "w": 71
+  },
+  "smash_5": {
+   "ax": 41,
+   "ay": 134,
+   "file": "smash_5.png",
+   "h": 135,
+   "w": 86
+  },
+  "walk_0": {
+   "ax": 48,
+   "ay": 131,
+   "file": "walk_0.png",
+   "h": 131,
+   "w": 106
+  },
+  "walk_1": {
+   "ax": 52,
+   "ay": 135,
+   "file": "walk_1.png",
+   "h": 135,
+   "w": 109
+  },
+  "walk_2": {
+   "ax": 49,
+   "ay": 131,
+   "file": "walk_2.png",
+   "h": 131,
+   "w": 107
+  },
+  "walk_3": {
+   "ax": 48,
+   "ay": 128,
+   "file": "walk_3.png",
+   "h": 128,
+   "w": 104
+  },
+  "walk_4": {
+   "ax": 48,
+   "ay": 128,
+   "file": "walk_4.png",
+   "h": 129,
+   "w": 103
+  },
+  "walk_5": {
+   "ax": 47,
+   "ay": 127,
+   "file": "walk_5.png",
+   "h": 127,
+   "w": 105
+  }
+ },
+ "ref_idle_h": 128,
+ "sheet_scale": {
+  "burst": {
+   "idle_h_src": 106,
+   "idle_w_src": 89,
+   "scale": 1.2075
+  },
+  "charge": {
+   "idle_h_src": 103,
+   "idle_w_src": 84,
+   "scale": 1.2609
+  },
+  "gexp": {
+   "idle_h_src": 100,
+   "idle_w_src": 83,
+   "scale": 1.2874
+  },
+  "orb": {
+   "idle_h_src": 96,
+   "idle_w_src": 83,
+   "scale": 1.3139
+  },
+  "punch": {
+   "idle_h_src": 132,
+   "idle_w_src": 93,
+   "scale": 1.0586
+  },
+  "smash": {
+   "idle_h_src": 141,
+   "idle_w_src": 103,
+   "scale": 0.9732
+  },
+  "walk": {
+   "idle_h_src": 412,
+   "scale": 0.3155
+  }
+ }
+}

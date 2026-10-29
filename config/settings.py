@@ -126,7 +126,7 @@ CHECKPOINT_WIDTH = 28
 CHECKPOINT_HEIGHT = 60
 
 # ---------- Área secreta ----------
-SECRET_COIN_VALUE = 5
+SECRET_COIN_VALUE = 15      # moedas da área secreta: 3x a comum (era 5x quando a comum valia 1)
 
 # ---------- Inimigos ----------
 BASIC_ENEMY_WIDTH = 32
@@ -179,8 +179,9 @@ BOSS_SLAM_TELEGRAPH = 40
 BOSS_SLAM_ACTIVE_FRAMES = 16          # quanto tempo o golpe de terremoto fica realmente "ativo" podendo acertar
 BOSS_SLAM_REACH = 130                 # alcance a partir do CENTRO do Boss (tem que passar da distância em que ele para de perseguir)
 BOSS_PHASE2_HEALTH_RATIO = 0.5
-BOSS_BARRAGE_PROJECTILE_COUNT = 5
+BOSS_BARRAGE_PROJECTILE_COUNT = 8      # estilhaços da explosão multidirecional, em leque de 360° (um deles mira em Kael)
 BOSS_BARRAGE_PROJECTILE_SPEED = 10
+BOSS_BARRAGE_PROJECTILE_LIFETIME = 90  # frames de vida de cada estilhaço (some ao expirar, mesmo sem bater em nada)
 BOSS_BARRAGE_TELEGRAPH = 45
 BOSS_CHASE_STOP_DISTANCE = 70
 
@@ -209,19 +210,39 @@ BOSS_MELEE_RECOVER_FRAMES = 24        # recuperação após o golpe, antes de vo
 BOSS_MELEE_COOLDOWN = 100             # intervalo MÍNIMO entre golpes (~1,7 s), contado a partir do fim do anterior
 BOSS_MELEE_PHASE2_COOLDOWN_MULT = 0.85
 
+# Orbe de energia (ataque à distância novo, folha pixel_energy_projectile_sheet). Tempos em frames (60 FPS).
+# Preparação (hiper-armadura, como os outros telegraphs) -> arremesso de UMA esfera -> recuperação.
+BOSS_ORB_IN_PHASE1 = True             # False = o orbe só aparece na Fase 2 (a Fase 1 fica só com slam/investida/golpe curto)
+BOSS_ORB_CHANCE = 0.4                 # chance de escolher o orbe, quando longe o bastante e fora do intervalo mínimo
+BOSS_ORB_MIN_DISTANCE = 220           # só lança se Kael estiver pelo menos tão longe (px, horizontal entre centros); mais perto o slam cobre
+BOSS_ORB_COOLDOWN = 240               # intervalo MÍNIMO entre orbes (4 s), contado a partir do arremesso
+BOSS_ORB_TELEGRAPH = 40               # concentração da energia (quadros: mão, peito, esfera na mão)
+BOSS_ORB_RECOVER = 30                 # recuperação após o arremesso (Vharok fica exposto)
+BOSS_ORB_SPEED = 7.0                  # px/frame
+BOSS_ORB_SIZE = 34                    # hitbox quadrada do projétil (px)
+BOSS_ORB_LIFETIME = 150               # frames de vida (~2,5 s); some ao expirar, bater no cenário ou acertar Kael
+BOSS_ORB_MAX_ANGLE_DEG = 25           # inclinação máxima da mira em relação à horizontal (o orbe nunca vai direto ao chão/teto)
+BOSS_ORB_RELEASE_FRAMES = 12          # duração da animação de arremesso (2 quadros x 6)
+
 # Visual do Boss (enemies/boss_sprites.py). Puramente cosmético: não altera
-# BOSS_WIDTH/BOSS_HEIGHT nem nenhuma colisão.
-BOSS_SPRITE_SCALE = 1.5               # escala do corpo e das ondas de choque (a onda larga fica ~ do tamanho da área do slam)
-BOSS_IMPACT_SCALE = 1.0               # escala das faíscas de impacto da rajada
-BOSS_IDLE_FRAME_TICKS = 10            # frames de jogo por quadro do idle
-BOSS_WALK_FRAME_TICKS = 6             # idem, caminhada (Fase 1)
-BOSS_WALK_FRAME_TICKS_RAGE = 4        # idem, caminhada enfurecida (Fase 2 - ele anda 1.4x mais rápido)
-BOSS_SLAM_STRIKE_FRAME_TICKS = 4      # 4 quadros x 4 = 16 = BOSS_SLAM_ACTIVE_FRAMES
-BOSS_BARRAGE_RELEASE_FRAME_TICKS = 6
+# BOSS_WIDTH/BOSS_HEIGHT nem nenhuma colisão. Os quadros em assets/boss/knight
+# já saem do tools/process_knight_sheets.py normalizados (idle ~128 px de altura).
+BOSS_SPRITE_SCALE = 1.0               # escala extra sobre os quadros normalizados (1.0 = tamanho pronto)
+BOSS_SHARD_SCALE = 0.85               # escala do estilhaço da explosão multidirecional
+BOSS_ORB_SPRITE_SCALE = 1.0           # escala da esfera do orbe (a hitbox é BOSS_ORB_SIZE, independente)
+BOSS_IMPACT_SCALE = 1.0               # escala das faíscas de impacto dos estilhaços
+BOSS_ORB_IMPACT_SCALE = 1.3           # escala da explosão do orbe
+BOSS_WALK_FRAME_TICKS = 8             # frames de jogo por quadro da caminhada (6 quadros); Fase 1
+BOSS_WALK_FRAME_TICKS_RAGE = 6        # idem, Fase 2 (ele anda 1.4x mais rápido)
+BOSS_BARRAGE_RELEASE_FRAME_TICKS = 4  # 3 quadros de liberação x 4 = 12 frames
+BOSS_CHARGE_HIT_POSE_FRAMES = 10      # pose de impacto ao acertar Kael na investida (início da recuperação)
+BOSS_CHARGE_SKID_FRAMES = 18          # pose de derrapagem (poeira) logo após a investida terminar
+BOSS_SLAM_EMBER_FRAMES = 14           # brasas que se dissipam no chão depois do slam
+BOSS_SLAM_EMBER_OFFSET = 75           # distância (px) das brasas ao centro do boss, para cada lado
 BOSS_PHASE2_FLASH_FRAMES = 48         # pisca vermelho ao entrar na Fase 2 (só visual; não pausa nada)
 
 # ---------- Economia / Progressão ----------
-COIN_VALUE = 1
+COIN_VALUE = 5               # dinheiro por moeda comum
 UPGRADE_HEALTH_COST = 10
 UPGRADE_HEALTH_AMOUNT = 20   # por nível (5 níveis = +100 de vida máxima)
 MAX_UPGRADE_LEVEL = 5

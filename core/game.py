@@ -139,9 +139,15 @@ class Game:
         """Usado pelo menu de pausa: volta ao último ponto do Núcleo/
         checkpoint imediatamente, sem passar pela tela de derrota."""
         self.respawn_system.respawn(self.player)
+        self._reset_boss_attacks()
         self._prev_health = self.player.health
         self.audio.play("respawn")
         self.states.change(settings.STATE_PLAYING)
+
+    def _reset_boss_attacks(self):
+        """Kael renasceu: projéteis e golpes do Boss em andamento não continuam."""
+        if self.level.boss and self.level.boss.alive:
+            self.level.boss.reset_combat_state()
 
     def return_to_menu(self):
         self.music.stop()
@@ -209,6 +215,7 @@ class Game:
                 )
             if self.game_over_screen.ready_to_continue() and self.input.confirm_pressed():
                 self.respawn_system.respawn(self.player)
+                self._reset_boss_attacks()
                 self._prev_health = self.player.health
                 self.audio.play("respawn")
                 self.states.change(settings.STATE_PLAYING)

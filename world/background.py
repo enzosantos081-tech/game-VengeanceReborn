@@ -572,7 +572,8 @@ class SegmentedWorldBackdrop:
     Cada PNG é uma camada independente com transparência. As camadas são
     preparadas uma vez, mantêm a proporção e se repetem horizontalmente.
     O movimento é relativo à câmera e cada profundidade tem uma velocidade.
-    Entre x=6000 e x=7000, as duas composições fazem crossfade.
+    No intervalo [TRANSITION_START, TRANSITION_END] as duas composições fazem crossfade
+    (a Jornada centra esse intervalo no limite entre floresta e caverna).
     """
     PARALLAX_FACTORS = (0.04, 0.08, 0.13, 0.19, 0.25, 0.32, 0.40, 0.48)
     TRANSITION_START = 6000
@@ -590,8 +591,11 @@ class SegmentedWorldBackdrop:
         return (all(os.path.isfile(os.path.join(desert, f"{i}.png")) for i in range(1, 5))
                 and all(os.path.isfile(os.path.join(cave, f"{i}.png")) for i in range(1, 8)))
 
-    def __init__(self, level_width):
+    def __init__(self, level_width, transition=None):
         self.level_width = level_width
+        # (início, fim) do crossfade floresta -> caverna; padrão = valores da classe.
+        if transition is not None:
+            self.TRANSITION_START, self.TRANSITION_END = transition
         self.screen_w = settings.SCREEN_WIDTH
         self.screen_h = settings.SCREEN_HEIGHT
         self.desert = self._load_desert_layers()

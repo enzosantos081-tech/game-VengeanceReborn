@@ -1,129 +1,157 @@
 """
 enemies/boss_sprites.py
-Carrega e recorta a spritesheet do Vharok (assets/boss/vharok_spritesheet.png).
+Carrega os quadros do Cavaleiro Sombrio (novo visual de Vharok) e define as
+tabelas de animação usadas por enemies/boss.py.
 
-A sheet tem 768x576 px, em uma grade de 96x96 (8 colunas x 6 linhas). Os
-quadros NÃO são percorridos automaticamente: cada animação é uma lista
-explícita de (linha, coluna) definida abaixo.
+Origem dos quadros
+------------------
+As 7 spritesheets originais (assets/boss/source/*.webp) NÃO são grades
+regulares: os quadros têm larguras diferentes, efeitos que encostam nos
+vizinhos e o personagem está em escala levemente diferente em cada folha.
+tools/process_knight_sheets.py segmenta cada folha, iguala as escalas e grava
+um PNG por quadro em assets/boss/knight/ mais o manifest.json, que guarda para
+cada quadro o tamanho e a ÂNCORA (ax, ay):
 
-    linha 0  idle (8 quadros; vários são idênticos - respiração sutil)
-    linha 1  caminhada (8 quadros; os pés se alternam)
-    linha 2  slam: col 1-3 braços erguidos (preparação) | col 4-7 golpe/impacto
-    linha 3  rajada: col 1-4 carga | col 5-6 liberação | col 7 recuperação
-    linha 4  pulo (col 1-4) - NÃO usado, o Vharok não pula
-             col 5-7: ondas de choque no chão (efeito avulso, crescendo)
-    linha 5  col 0-1: onda de choque larga (efeito avulso, 1 quadro de 190px)
-             col 2-5: faíscas vermelhas em leque (efeito avulso, crescendo)
+    corpo   ax = centro do tronco, ay = linha da sola dos pés
+    efeito  ax, ay = centro (ou base, para efeitos de chão)
 
-Alinhamento: cada quadro do corpo é recortado como a CÉLULA INTEIRA 96x96
-(sem cortar coroa, braços, esferas de energia...) e posicionado pela "linha
-dos pés" do próprio quadro (_FEET_EDGE, medida na sheet) no chão da arena
-(rect.bottom), e pelo centro da célula (x=48) no centro do hitbox. Assim o
-sprite não "pula" entre quadros, mesmo nos quadros em que a imagem original
-está 2 px mais baixa. A hitbox (settings.BOSS_WIDTH/HEIGHT) não é alterada.
+Desenhar um quadro significa colocar a âncora sobre um ponto do jogo: o centro
+do hitbox no chão (rect.centerx, rect.bottom) para o corpo. Como a âncora são
+os pés, o personagem não "pula" entre quadros de tamanhos diferentes (agachado,
+braços erguidos, investida...) e o tamanho do sprite não altera a hitbox
+(settings.BOSS_WIDTH/HEIGHT), a posição física nem a colisão.
 
-Se o arquivo da sheet não existir ou não carregar, get_boss_sprites()
-devolve None e enemies/boss.py usa o desenho retangular antigo.
+Os quadros olham para a DIREITA; virado para a esquerda é um flip horizontal
+com a âncora espelhada.
+
+Mapa dos quadros (prefixo = folha de origem)
+--------------------------------------------
+    burst_0                      idle (estável, parado)
+    walk_0 .. walk_5             caminhada (ciclo de 6 quadros, folha pixel_walk_sheet)
+    smash_1, smash_2             slam: braços erguidos (preparação)
+    smash_3                      slam: queda do golpe, poeira
+    gexp_3, gexp_5, gexp_6       slam: erupção de fogo no chão (corpo + fogo)
+    smash_5                      slam: recuperação
+    burst_1, burst_2             rajada: esferas nas mãos / energia no peito
+    burst_3..burst_5             rajada: liberação (pétalas se espalhando)
+    burst_6                      rajada: recuperação
+    chg_0, chg_1                 investida: preparação
+    chg_2 .. chg_5               investida: arranque e corrida (chg_3..5 em ciclo)
+    chg_6, chg_7                 investida: golpe de impacto / derrapagem
+    punch_0 .. punch_4           golpe curto: preparação, braço, carga, impacto, recuperação
+    orb_1, orb_2, orb_5          orbe: concentração, carga no peito, esfera na mão
+    orb_6, orb_3                 orbe: arremesso (sem a esfera: ela vira projétil)
+    orb_7                        orbe: recuperação
+    orb_trail, orb_round         esfera do projétil (com rastro / redonda)
+    fx_shard_0..3                estilhaço da rajada (giro)
+    fx_star_0..2, fx_puff_0..1   faíscas e fumaça de impacto
+    fx_embers                    brasas que se dissipam no chão (fim do slam)
+
+Se o manifesto ou algum PNG não puder ser carregado, get_boss_sprites()
+devolve None e enemies/boss.py usa o desenho retangular de reserva.
 """
 
+import json
 import math
 import os
 import pygame
 from config import settings
 
-SHEET_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                          "assets", "boss", "vharok_spritesheet.png")
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRAMES_DIR = os.path.join(_ROOT, "assets", "boss", "knight")
+MANIFEST_PATH = os.path.join(FRAMES_DIR, "manifest.json")
 
-CELL = 96
-CELL_CENTER_X = 48
+IDLE_FRAME = "burst_0"
+WALK_FRAMES = tuple(f"walk_{i}" for i in range(6))   # ordem de leitura da folha, em ciclo
 
-# Borda inferior (exclusiva) da última linha "sólida" (>= 8 px opacos) de cada
-# quadro do corpo = sola dos pés. Medido na sheet processada.
-_FEET_EDGE = {
-    (0, 0): 88, (0, 1): 90, (0, 2): 88, (0, 3): 88, (0, 4): 88, (0, 5): 90, (0, 6): 88, (0, 7): 88,
-    (1, 0): 90, (1, 1): 88, (1, 2): 88, (1, 3): 90, (1, 4): 88, (1, 5): 88, (1, 6): 90, (1, 7): 88,
-    (2, 0): 88, (2, 1): 88, (2, 2): 88, (2, 3): 88, (2, 4): 88, (2, 5): 88, (2, 6): 88, (2, 7): 88,
-    (3, 0): 88, (3, 1): 88, (3, 2): 88, (3, 3): 88, (3, 4): 88, (3, 5): 88, (3, 6): 88, (3, 7): 88,
-    (4, 4): 88,
+# ---- Tabelas de animação: [(quadro, peso)] ---------------------------------
+# O quadro mostrado é escolhido pela PROPORÇÃO do tempo decorrido (timers da
+# máquina de estados do boss), então a animação sempre acompanha o tempo real
+# do ataque, qualquer que seja o valor configurado em settings.
+SLAM_WINDUP = [("smash_1", 2), ("smash_2", 3)]
+SLAM_STRIKE = [("smash_3", 3), ("gexp_3", 2), ("gexp_5", 3), ("gexp_6", 8)]   # soma = BOSS_SLAM_ACTIVE_FRAMES
+BARRAGE_CHARGE = [("burst_1", 1), ("burst_2", 1)]
+BARRAGE_RELEASE = [("burst_3", 1), ("burst_4", 1), ("burst_5", 1)]
+CHARGE_WINDUP = [("chg_0", 1), ("chg_1", 2)]
+ORB_WINDUP = [("orb_1", 2), ("orb_2", 2), ("orb_5", 3)]
+ORB_RELEASE = [("orb_6", 1), ("orb_3", 1)]
+MELEE_WINDUP = [("punch_0", 1), ("punch_1", 2), ("punch_2", 2)]
+MELEE_STRIKE = [("punch_3", 1)]
+MELEE_RECOVER = [("punch_4", 1)]
+
+CHARGE_LAUNCH = "chg_2"
+CHARGE_RUN = ("chg_3", "chg_4", "chg_5")
+CHARGE_HIT = "chg_6"
+CHARGE_SKID = "chg_7"
+
+# Pose mantida durante a recuperação (RECOVER) de cada ataque
+RECOVER_FRAME = {
+    "slam": "smash_5",
+    "barrage": "burst_6",
+    "orb": "orb_7",
+    "charge": CHARGE_SKID,
 }
 
-
-def _cells(row, cols):
-    return [(row, c) for c in cols]
-
-
-# Animações do corpo: nome -> lista de (linha, coluna)
-BODY_ANIMS = {
-    "idle": _cells(0, range(8)),
-    "walk": _cells(1, range(8)),
-    "slam_windup": _cells(2, (1, 2, 3)),       # braços erguidos, último quadro = "carregado" (listras vermelhas)
-    "slam_strike": _cells(2, (4, 5, 6, 7)),    # agacha e bate no chão; as chamas sobem e se espalham
-    "barrage_charge": _cells(3, (1, 2, 3, 4)),  # braços abertos, esferas nas mãos, energia no peito
-    "barrage_release": _cells(3, (5, 6)),      # energia explode para fora
-    "recover": [(3, 7)],                       # postura baixa, sem efeitos (idêntica a (4, 4))
+# Sequências de impacto dos projéteis: quadros de efeito (IMPACT_FRAME_TICKS cada)
+IMPACT_SEQ = {
+    "shard": ("fx_star_0", "fx_star_1", "fx_star_2"),
+    "orb": ("fx_star_1", "fx_star_2", "fx_puff_0", "fx_puff_1"),
 }
-
-# Efeitos avulsos (sem corpo): nome -> (x, y, w, h, âncora_x, âncora_y) em px da sheet.
-# Âncora = ponto do recorte que fica sobre o ponto de referência no jogo.
-_GROUND_EDGE = 87  # borda inferior (exclusiva) das ondas, medida na sheet
-EFFECTS = {
-    "wave_0": (5 * CELL, 4 * CELL, CELL, CELL, CELL_CENTER_X, _GROUND_EDGE),
-    "wave_1": (6 * CELL, 4 * CELL, CELL, CELL, CELL_CENTER_X, _GROUND_EDGE),
-    "wave_2": (7 * CELL, 4 * CELL, CELL, CELL, CELL_CENTER_X, _GROUND_EDGE),
-    "wave_full": (0, 5 * CELL, 198, CELL, 97, _GROUND_EDGE),
-    "burst_0": (2 * CELL, 5 * CELL, CELL, CELL, 50, 60),
-    "burst_1": (3 * CELL, 5 * CELL, CELL, CELL, 50, 60),
-    "burst_2": (4 * CELL, 5 * CELL, CELL, CELL, 50, 60),
-    "burst_3": (5 * CELL, 5 * CELL, CELL, CELL, 50, 60),
-    "shard": (450, 542, 17, 10, 8, 5),          # projétil: cabeça à direita, rastro à esquerda
-}
-
-WAVE_STAGES = ("wave_0", "wave_1", "wave_2")
-BURST_FRAMES = ("burst_0", "burst_1", "burst_2")
+IMPACT_FRAME_TICKS = 3
+SHARD_SPIN = ("fx_shard_0", "fx_shard_1", "fx_shard_2", "fx_shard_3")
+SHARD_SPIN_TICKS = 3
 
 # Tinturas aditivas (RGB somado ao quadro; o alfa é preservado)
 TINTS = {
-    "hit": (200, 200, 200),          # acerto do jogador (antes: corpo todo branco)
-    "tele_slam": (80, 55, 0),        # telegraph do slam (antes: retângulo amarelo piscando)
-    "tele_barrage": (70, 0, 95),     # telegraph da rajada (antes: retângulo roxo piscando)
-    "tele_charge": (0, 65, 85),      # telegraph da investida (azul-ciano, distinto do slam e da rajada)
-    "rage": (34, 0, 6),              # Fase 2: armadura avermelhada
+    "hit": (200, 200, 200),          # acerto do jogador
+    "tele_slam": (60, 40, 0),        # telegraph do slam
+    "tele_barrage": (70, 0, 95),     # telegraph da rajada
+    "tele_charge": (0, 65, 85),      # telegraph da investida (azul-ciano)
+    "tele_orb": (60, 4, 14),         # telegraph do orbe (vermelho)
+    "rage": (16, 0, 3),              # Fase 2: armadura avermelhada
     "rage_flash": (170, 30, 25),     # pisca ao entrar na Fase 2
 }
 
 
+def weighted_frame(table, elapsed, total):
+    """Quadro de 'table' ([(nome, peso)]) para 'elapsed' de 'total' ticks."""
+    total = max(1, total)
+    weights = sum(w for _, w in table)
+    pos = max(0, min(total - 1, elapsed)) * weights / total
+    acc = 0
+    for name, w in table:
+        acc += w
+        if pos < acc:
+            return name
+    return table[-1][0]
+
+
 class BossSprites:
-    def __init__(self, sheet):
+    def __init__(self, frames, manifest):
         self.scale = settings.BOSS_SPRITE_SCALE
-        self._sheet = sheet
-        self._cache = {}         # (nome, flipped, tint) -> (Surface, (ox, oy))
-        self._shard_cache = {}   # (dir, ângulo) -> Surface
+        self._frames = frames            # nome -> (Surface, ax, ay)
+        self._manifest = manifest["frames"]
+        self._cache = {}                 # (nome, flipped, tint, scale) -> (Surface, (ox, oy))
+        self._rot_cache = {}             # projéteis girados
         self._glow = None
 
-    # ---- recorte / escala ----
-    def _raw_frame(self, name):
-        """Recorte (sem escala) + âncora para 'name' (corpo ou efeito)."""
-        if name in EFFECTS:
-            x, y, w, h, ax, ay = EFFECTS[name]
-        else:
-            row, col = BODY_NAMES[name]
-            x, y, w, h = col * CELL, row * CELL, CELL, CELL
-            ax, ay = CELL_CENTER_X, _FEET_EDGE[(row, col)]
-        return self._sheet.subsurface(pygame.Rect(x, y, w, h)).copy(), ax, ay
+    def size(self, name):
+        return self._frames[name][0].get_size()
 
+    # ---- quadros ----
     def get(self, name, facing_right=True, tint=None, scale=None):
-        """Devolve (Surface, (ox, oy)): desenhe em (ref_x + ox, ref_y + oy),
-        onde ref = (centro do hitbox, chão) para o corpo/ondas, ou o ponto
-        de impacto/centro para os demais efeitos."""
+        """Devolve (Surface, (ox, oy)): desenhe em (ref_x + ox, ref_y + oy), onde
+        ref = (centro do hitbox, chão) para o corpo, ou o ponto central/base
+        do efeito."""
         scale = self.scale if scale is None else scale
         key = (name, facing_right, tint, scale)
         hit = self._cache.get(key)
         if hit is not None:
             return hit
-        surf, ax, ay = self._raw_frame(name)
-        w, h = surf.get_size()
+        surf, ax, ay = self._frames[name]
         if scale != 1.0:
-            surf = pygame.transform.scale(surf, (max(1, round(w * scale)), max(1, round(h * scale))))
+            w, h = surf.get_size()
+            surf = pygame.transform.smoothscale(surf, (max(1, round(w * scale)), max(1, round(h * scale))))
         sw, sh = surf.get_size()
         ox, oy = -round(ax * scale), -round(ay * scale)
         if not facing_right:
@@ -136,27 +164,33 @@ class BossSprites:
         self._cache[key] = result
         return result
 
-    def get_shard(self, vx, vy):
-        """Projétil da rajada, girado conforme a trajetória."""
-        direction = 1 if vx >= 0 else -1
-        ang = math.degrees(math.atan2(vy, abs(vx))) if vx else 0.0
-        key = (direction, int(round(ang)))
-        surf = self._shard_cache.get(key)
-        if surf is None:
-            base, _ax, _ay = self._raw_frame("shard")
-            w, h = base.get_size()
-            base = pygame.transform.scale(base, (round(w * self.scale), round(h * self.scale)))
-            if direction < 0:
-                base = pygame.transform.flip(base, True, False)
-            surf = pygame.transform.rotate(base, -direction * key[1]) if key[1] else base
-            self._shard_cache[key] = surf
+    # ---- projéteis ----
+    def get_shard(self, tick):
+        """Estilhaço da rajada. Gira alternando os 4 quadros de efeito (vertical /
+        horizontal), sem rotacionar a imagem; assim parece um cristal girando."""
+        name = SHARD_SPIN[(tick // SHARD_SPIN_TICKS) % len(SHARD_SPIN)]
+        surf, _off = self.get(name, True, None, settings.BOSS_SHARD_SCALE)
         return surf
 
+    def get_orb(self, vx, vy):
+        """Esfera de energia do orbe, com o rastro apontando para trás da trajetória."""
+        direction = 1 if vx >= 0 else -1
+        ang = int(round(math.degrees(math.atan2(-vy, abs(vx) if vx else 1)) / 5.0)) * 5
+        key = (direction, ang)
+        surf = self._rot_cache.get(key)
+        if surf is None:
+            base, _off = self.get("orb_trail", direction > 0, None, settings.BOSS_ORB_SPRITE_SCALE)
+            surf = pygame.transform.rotate(base, ang * direction) if ang else base
+            self._rot_cache[key] = surf
+        return surf
+
+    # ---- aura da Fase 2 ----
     def get_glow(self):
         """Aura vermelha suave (Fase 2), desenhada atrás do corpo."""
         if self._glow is None:
-            w = int(CELL * self.scale * 1.15)
-            h = int(CELL * self.scale * 1.1)
+            iw, ih = self.size(IDLE_FRAME)
+            w = int(iw * self.scale * 1.25)
+            h = int(ih * self.scale * 1.1)
             glow = pygame.Surface((w, h), pygame.SRCALPHA)
             # draw.ellipse SOBRESCREVE os pixels (não acumula alfa): por isso o
             # alfa cresce do anel externo (fraco) para o interno (mais forte).
@@ -170,16 +204,28 @@ class BossSprites:
             self._glow = glow
         return self._glow
 
+    # ---- derivados do manifesto ----
+    def orb_spawn_offset(self):
+        """(dx, dy) do centro da esfera em relação a (centro do corpo, chão), virado
+        para a direita, na escala do jogo. dy é negativo (acima do chão)."""
+        info = self._manifest.get("orb_trail", {})
+        dx = info.get("dx_from_body", 120.0)
+        dy = info.get("dy_from_feet", -85.0)
+        return dx * self.scale, dy * self.scale
 
-# nome do quadro de corpo -> (linha, coluna), ex.: "walk_3" -> (1, 3)
-BODY_NAMES = {}
-for _anim, _cells_list in BODY_ANIMS.items():
-    for _i, _cell in enumerate(_cells_list):
-        BODY_NAMES[f"{_anim}_{_i}"] = _cell
 
-
-def frame_name(anim, index):
-    return f"{anim}_{index}"
+def _required_names():
+    names = set(WALK_FRAMES)
+    names |= {IDLE_FRAME, CHARGE_LAUNCH, CHARGE_HIT, CHARGE_SKID, "orb_trail", "orb_round", "fx_embers"}
+    for table in (SLAM_WINDUP, SLAM_STRIKE, BARRAGE_CHARGE, BARRAGE_RELEASE, CHARGE_WINDUP,
+                  ORB_WINDUP, ORB_RELEASE, MELEE_WINDUP, MELEE_STRIKE, MELEE_RECOVER):
+        names.update(n for n, _ in table)
+    names.update(CHARGE_RUN)
+    names.update(RECOVER_FRAME.values())
+    for seq in IMPACT_SEQ.values():
+        names.update(seq)
+    names.update(SHARD_SPIN)
+    return names
 
 
 _instance = None
@@ -187,17 +233,22 @@ _tried = False
 
 
 def get_boss_sprites():
-    """Singleton; None se a sheet não puder ser carregada (fallback)."""
+    """Singleton; None se os quadros não puderem ser carregados (fallback)."""
     global _instance, _tried
     if _tried:
         return _instance
     _tried = True
     try:
-        if not os.path.isfile(SHEET_PATH):
-            return None
-        sheet = pygame.image.load(SHEET_PATH)
-        sheet = sheet.convert_alpha() if pygame.display.get_surface() is not None else sheet
-        _instance = BossSprites(sheet)
-    except (pygame.error, OSError):
+        with open(MANIFEST_PATH, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        frames = {}
+        convert = pygame.display.get_surface() is not None
+        for name in _required_names():
+            info = manifest["frames"][name]
+            surf = pygame.image.load(os.path.join(FRAMES_DIR, info["file"]))
+            surf = surf.convert_alpha() if convert else surf
+            frames[name] = (surf, info["ax"], info["ay"])
+        _instance = BossSprites(frames, manifest)
+    except (pygame.error, OSError, KeyError, ValueError):
         _instance = None
     return _instance

@@ -382,6 +382,8 @@ class PlatformGroup:
         self.platforms = []
         self._linked_count = -1
         self._gaps = []   # (x_esq, x_dir, y_topo) de cada buraco entre trechos de chão
+        self._rects_cache = None
+        self._rects_cache_len = -1
 
     def add(self, x, y, width, height, is_ground=False, color_override=None):
         p = Platform(x, y, width, height, is_ground, color_override=color_override)
@@ -401,11 +403,18 @@ class PlatformGroup:
     def update(self):
         for p in self.platforms:
             p.update()
+        self._rects_cache = None   # a solidez (quebradiças) só muda aqui, dentro do update
 
     def rects(self):
         """Retornados apenas os sólidos no momento (plataformas quebradiças
-        já despencadas não bloqueiam o movimento)."""
-        return [p.rect for p in self.platforms if p.is_solid()]
+        já despencadas não bloqueiam o movimento). Com a Jornada de 30 telas
+        há centenas de plataformas e vários inimigos chamando isto a cada
+        frame, então a lista é montada uma vez por frame e devolvida como
+        cópia (os chamadores podem dar extend/append sem afetar o cache)."""
+        if self._rects_cache is None or self._rects_cache_len != len(self.platforms):
+            self._rects_cache = [p.rect for p in self.platforms if p.is_solid()]
+            self._rects_cache_len = len(self.platforms)
+        return list(self._rects_cache)
 
     def moving_platforms(self):
         return [p for p in self.platforms if isinstance(p, MovingPlatform)]

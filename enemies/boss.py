@@ -10,6 +10,9 @@ ataque"):
 3. ao cair para 50% de vida ou menos, entra na Fase 2: fica mais rápido
    e passa a alternar aleatoriamente entre "slam" e uma nova "rajada"
    de projéteis à distância;
+3a. (extra) ORBE de energia: com Kael longe, Vharok concentra energia e arremessa
+   UMA esfera na direção dele (preparação -> arremesso -> recuperação);
+   o ataque é sorteado em ambas as fases (settings.BOSS_ORB_IN_PHASE1);
 3b. (extra) ocasionalmente faz uma INVESTIDA horizontal rápida em direção a
    Kael (telegraph -> dash -> recuperação), com intervalo mínimo entre
    investidas; cada investida causa no máximo um evento de dano;
@@ -22,7 +25,8 @@ ataque"):
    nenhum ataque telegrafado / hiper-armadura);
 5. barra de vida grande e visível, fixa na tela.
 
-Visual: o corpo e os efeitos vêm da spritesheet (enemies/boss_sprites.py).
+Visual: o corpo e os efeitos vêm dos quadros do Cavaleiro Sombrio
+(enemies/boss_sprites.py, gerados pelas spritesheets em assets/boss/source).
 As animações apenas ACOMPANHAM a máquina de estados abaixo (estado, timers
 e attack_triggered_this_frame); nenhuma lógica de dano, vida, fase ou
 movimento depende de qual quadro está na tela.
@@ -47,6 +51,7 @@ class Boss(Enemy):
     ATTACK_SLAM = "slam"
     ATTACK_BARRAGE = "barrage"
     ATTACK_CHARGE = "charge"
+    ATTACK_ORB = "orb"
     ATTACK_MELEE = "melee"   # só aparece em attack_triggered_this_frame (som/tremor); não entra em _choose_attack
 
     MELEE_WINDUP = "windup"
@@ -81,7 +86,10 @@ class Boss(Enemy):
         self.charge_speed = 0.0
         self.charge_timer = 0
         self.charge_travelled = 0
-        self.attack_triggered_this_frame = None  # "slam"/"barrage"/"melee" no frame em que o golpe é executado (p/ som)
+        self.attack_triggered_this_frame = None  # "slam"/"barrage"/"orb"/"melee" no frame em que o golpe é executado (p/ som)
+        self.orb_cooldown = 0            # frames até poder lançar outro orbe
+        self.recover_total = 0           # duração total do RECOVER atual (só p/ sincronizar a animação)
+        self.charge_hit = False          # a investida atual acertou Kael? (só p/ escolher a pose de recuperação)
 
         # ---- Golpe curto (Kael encostado) ----
         self.melee_cooldown = 0          # frames até poder golpear de novo
@@ -90,16 +98,16 @@ class Boss(Enemy):
         self.melee_dir = 1               # lado do golpe (1 direita, -1 esquerda); trava quando o golpe sai
         self.melee_rect = None           # hitbox ativa (só existe na etapa MELEE_STRIKE; recalculada a cada frame)
         self.melee_hit_done = False      # dano já aplicado nesta execução?
-        self.melee_windup_start = 0      # quadro inicial do aviso (continua a pose se veio do aviso do slam)
         self.slam_interrupt_used = False  # um slam já foi cancelado pelo golpe curto: o próximo vai até o fim
 
         # ---- Estado puramente visual (não afeta a lógica de combate) ----
         self.sprites = boss_sprites.get_boss_sprites()   # None -> desenho retangular antigo
-        self.anim_tick = 0            # contador de frames de jogo, p/ idle/caminhada
+        self.anim_tick = 0            # contador de frames de jogo (aura, pulsos)
+        self.walk_tick = 0            # frames andando (zera ao parar, p/ o ciclo sempre começar no 1º quadro)
         self.strike_kind = None       # "slam"/"barrage": animação de execução em andamento
         self.strike_tick = 0          # frames desde a execução do golpe
         self.phase_flash_timer = 0    # pisca ao entrar na Fase 2
-        self.impacts = []             # faíscas onde a rajada bateu: {"x", "y", "t"}
+        self.impacts = []             # efeitos avulsos (faíscas, brasas): {"x", "y", "t", "kind"}
 
         # ---- HUD do chefe (somente visual; não participa do combate) ----
         self._hud_trail_health = float(self.max_health)
@@ -115,11 +123,15 @@ class Boss(Enemy):
     def update(self, level, player):
         super().update(level, player)
         if not self.alive:
+            # Boss derrotado: nenhum projétil/efeito pode ficar ativo ou congelado.
+            self._clear_transients()
             return
 
         self.attack_triggered_this_frame = None
         if self.charge_cooldown > 0:
             self.charge_cooldown -= 1
+        if self.orb_cooldown > 0:
+            self.orb_cooldown -= 1
         if self.melee_cooldown > 0:
             self.melee_cooldown -= 1
         if not self.phase2 and self.health <= self.max_health * settings.BOSS_PHASE2_HEALTH_RATIO:
@@ -166,7 +178,7 @@ class Boss(Enemy):
 
         elif self.state == Boss.STATE_TELEGRAPH:
             self.vel_x = 0
-            if self.attack_type == Boss.ATTACK_CHARGE:
+            if self.attack_type in (Boss.ATTACK_CHARGE, Boss.ATTACK_ORB):
                 # Vira para o lado em que Kael está durante o aviso.
                 self.facing_right = player.rect.centerx > self.rect.centerx
             self.telegraph_timer -= 1
@@ -177,6 +189,8 @@ class Boss(Enemy):
                     self.state = Boss.STATE_ATTACK
                     if self.attack_type == Boss.ATTACK_SLAM:
                         self._perform_slam(player)
+                    elif self.attack_type == Boss.ATTACK_ORB:
+                        self._perform_orb(player)
                     else:
                         self._perform_barrage(player)
 
@@ -191,7 +205,8 @@ class Boss(Enemy):
 
         elif self.state == Boss.STATE_ATTACK:
             self.state = Boss.STATE_RECOVER
-            self.recover_timer = 20
+            self.recover_timer = settings.BOSS_ORB_RECOVER if self.attack_type == Boss.ATTACK_ORB else 20
+            self.recover_total = self.recover_timer
 
         elif self.state == Boss.STATE_RECOVER:
             self.vel_x = 0
@@ -233,7 +248,34 @@ class Boss(Enemy):
                     self.attack_rect = None
 
         self._update_projectiles(level, player)
+        if not player.alive:
+            # Kael morreu (por este ou outro golpe): nada fica no ar enquanto
+            # a tela de derrota aparece; o respawn chama reset_combat_state().
+            self._clear_transients()
         self._update_visual()
+
+    def _clear_transients(self):
+        """Remove tudo o que sobrevive ao ataque que o criou: projéteis, área
+        de dano do slam, hitbox do golpe curto, efeitos e animação de golpe."""
+        self.projectiles = []
+        self.impacts = []
+        self.attack_rect = None
+        self.attack_active_timer = 0
+        self.melee_rect = None
+        self.strike_kind = None
+
+    def reset_combat_state(self):
+        """Chamado quando Kael renasce na arena: o Boss volta à perseguição com a
+        recarga normal. Vida, fase e recargas de investida/golpe/orbe NÃO mudam."""
+        self._clear_transients()
+        self.state = Boss.STATE_CHASE
+        self.attack_timer = settings.BOSS_ATTACK_COOLDOWN
+        self.telegraph_timer = 0
+        self.recover_timer = 0
+        self.melee_stage = None
+        self.melee_timer = 0
+        self.vel_x = 0
+        self.charge_travelled = 0
 
     def _can_charge(self, player):
         """A investida só é sorteada com Kael vivo e longe o bastante, fora do
@@ -244,13 +286,29 @@ class Boss(Enemy):
             return False
         return abs(player.rect.centerx - self.rect.centerx) >= settings.BOSS_CHARGE_MIN_DISTANCE
 
+    def _can_orb(self, player):
+        """O orbe só é sorteado com Kael vivo e longe o bastante, fora do
+        intervalo mínimo e da animação de entrada na Fase 2."""
+        if player is None or not player.alive or not self.alive:
+            return False
+        if self.phase_flash_timer > 0 or self.orb_cooldown > 0:
+            return False
+        if not self.phase2 and not settings.BOSS_ORB_IN_PHASE1:
+            return False
+        return abs(player.rect.centerx - self.rect.centerx) >= settings.BOSS_ORB_MIN_DISTANCE
+
     def _choose_attack(self, player=None):
-        """Na Fase 1 existem o slam e (ocasionalmente) a investida. Na Fase 2,
-        Vharok alterna aleatoriamente entre slam e rajada, e também pode
-        investir."""
+        """Na Fase 1 existem o slam e (ocasionalmente) a investida e o orbe. Na
+        Fase 2, Vharok alterna aleatoriamente entre slam e a explosão
+        multidirecional, e também pode investir e lançar o orbe."""
         if self._can_charge(player) and random.random() < settings.BOSS_CHARGE_CHANCE:
             self.attack_type = Boss.ATTACK_CHARGE
             self.telegraph_timer = settings.BOSS_CHARGE_TELEGRAPH
+            self.state = Boss.STATE_TELEGRAPH
+            return
+        if self._can_orb(player) and random.random() < settings.BOSS_ORB_CHANCE:
+            self.attack_type = Boss.ATTACK_ORB
+            self.telegraph_timer = settings.BOSS_ORB_TELEGRAPH
             self.state = Boss.STATE_TELEGRAPH
             return
         if self.phase2 and random.random() < 0.5:
@@ -273,6 +331,7 @@ class Boss(Enemy):
         self.charge_speed = min(speed, self.rect.width // 2)
         self.charge_timer = settings.BOSS_CHARGE_MAX_FRAMES
         self.charge_travelled = 0
+        self.charge_hit = False
         self.strike_kind = None   # não sobrepõe animação de golpe anterior
         self.state = Boss.STATE_DASH
 
@@ -289,6 +348,8 @@ class Boss(Enemy):
             # Se Kael estava invulnerável (dash/i-frames) nada foi aplicado:
             # a investida continua e só conta como acerto se o dano entrar.
             hit = player.health < health_before
+            if hit:
+                self.charge_hit = True
 
         # Parede/limite da arena: o deslocamento real ficou menor que o pedido.
         blocked = moved < abs(round(self.vel_x))
@@ -300,6 +361,7 @@ class Boss(Enemy):
         self.vel_x = 0
         self.state = Boss.STATE_RECOVER
         self.recover_timer = settings.BOSS_CHARGE_RECOVER
+        self.recover_total = self.recover_timer
         mult = settings.BOSS_CHARGE_PHASE2_COOLDOWN_MULT if self.phase2 else 1.0
         self.charge_cooldown = int(settings.BOSS_CHARGE_COOLDOWN * mult)
 
@@ -358,14 +420,8 @@ class Boss(Enemy):
         return self._player_in_melee_range(player)
 
     def _start_melee(self, player):
-        # Ponto do aviso do slam em que estávamos (para a pose continuar, sem "pulo").
-        start = 0
         if self.state == Boss.STATE_TELEGRAPH:
             self.slam_interrupt_used = True
-            count = len(boss_sprites.BODY_ANIMS["slam_windup"])
-            elapsed = max(0, settings.BOSS_SLAM_TELEGRAPH - self.telegraph_timer)
-            start = min(count - 1, elapsed * count // max(1, settings.BOSS_SLAM_TELEGRAPH))
-        self.melee_windup_start = start
         self.state = Boss.STATE_MELEE
         self.melee_stage = Boss.MELEE_WINDUP
         self.melee_timer = settings.BOSS_MELEE_WINDUP_FRAMES
@@ -445,35 +501,76 @@ class Boss(Enemy):
         self.attack_triggered_this_frame = Boss.ATTACK_SLAM
         self.slam_interrupt_used = False   # um slam saiu: o próximo aviso volta a poder ser interrompido
 
+    def _new_projectile(self, kind, x, y, vx, vy, size, life):
+        rect = pygame.Rect(0, 0, size, size)
+        rect.center = (round(x), round(y))
+        return {"kind": kind, "rect": rect, "fx": float(x), "fy": float(y),
+                "vx": vx, "vy": vy, "t": 0, "life": life}
+
     def _perform_barrage(self, player):
-        """Dispara um leque de projéteis na direção do jogador (Fase 2)."""
-        count = settings.BOSS_BARRAGE_PROJECTILE_COUNT
-        base_direction = 1 if player.rect.centerx > self.rect.centerx else -1
+        """Explosão multidirecional (Fase 2): os estilhaços saem em leque de 360°.
+        O primeiro mira no centro de Kael, então o ataque continua ameaçando a
+        posição dele; os demais se espalham em intervalos iguais."""
+        count = max(1, settings.BOSS_BARRAGE_PROJECTILE_COUNT)
+        cx, cy = self.rect.centerx, self.rect.centery
+        base = math.atan2(player.rect.centery - cy, player.rect.centerx - cx)
+        speed = settings.BOSS_BARRAGE_PROJECTILE_SPEED
         for i in range(count):
-            spread = (i - count // 2) * 0.12
-            proj = pygame.Rect(self.rect.centerx, self.rect.centery, 12, 12)
-            vy = spread * settings.BOSS_BARRAGE_PROJECTILE_SPEED
-            self.projectiles.append({
-                "rect": proj,
-                "vx": base_direction * settings.BOSS_BARRAGE_PROJECTILE_SPEED,
-                "vy": vy,
-            })
+            ang = base + 2.0 * math.pi * i / count
+            self.projectiles.append(self._new_projectile(
+                "shard", cx, cy, math.cos(ang) * speed, math.sin(ang) * speed,
+                12, settings.BOSS_BARRAGE_PROJECTILE_LIFETIME))
         self.attack_triggered_this_frame = Boss.ATTACK_BARRAGE
 
+    def _perform_orb(self, player):
+        """Arremessa UMA esfera de energia da mão de Vharok em direção a Kael. A
+        mira é a posição de Kael no instante do arremesso, limitada a
+        BOSS_ORB_MAX_ANGLE_DEG em relação à horizontal."""
+        if self.sprites:
+            off_x, off_y = self.sprites.orb_spawn_offset()
+        else:
+            off_x, off_y = 110.0, -80.0
+        direction = 1 if self.facing_right else -1
+        x = self.rect.centerx + direction * off_x
+        y = self.rect.bottom + off_y
+        ahead = max(1.0, (player.rect.centerx - x) * direction)
+        ang = math.atan2(player.rect.centery - y, ahead)
+        limit = math.radians(settings.BOSS_ORB_MAX_ANGLE_DEG)
+        ang = max(-limit, min(limit, ang))
+        speed = settings.BOSS_ORB_SPEED
+        self.projectiles.append(self._new_projectile(
+            "orb", x, y, direction * math.cos(ang) * speed, math.sin(ang) * speed,
+            settings.BOSS_ORB_SIZE, settings.BOSS_ORB_LIFETIME))
+        self.orb_cooldown = settings.BOSS_ORB_COOLDOWN
+        self.attack_triggered_this_frame = Boss.ATTACK_ORB
+
     def _update_projectiles(self, level, player):
+        """Move (em float, sem perder frações de pixel), testa colisão e remove os
+        projéteis que acertaram, bateram no cenário, saíram do mundo ou
+        esgotaram o tempo de vida."""
         alive_projectiles = []
         for p in self.projectiles:
-            p["rect"].x += p["vx"]
-            p["rect"].y += p["vy"]
+            p["t"] += 1
+            p["fx"] += p["vx"]
+            p["fy"] += p["vy"]
+            p["rect"].center = (round(p["fx"]), round(p["fy"]))
+            if p["t"] >= p["life"]:
+                if p["kind"] == "orb":
+                    self._add_impact(p)       # a esfera se dissipa; estilhaços somem em silêncio
+                continue
             if level.rect_hits_solid(p["rect"]):
-                self._add_impact(p["rect"])
+                self._add_impact(p)
                 continue
             if p["rect"].colliderect(player.rect) and player.alive:
-                direction = 1 if p["vx"] > 0 else -1
+                if abs(p["vx"]) > 0.01:
+                    direction = 1 if p["vx"] > 0 else -1
+                else:
+                    direction = 1 if player.rect.centerx >= p["rect"].centerx else -1
                 player.take_damage(self.damage, knockback_dir=direction)
-                self._add_impact(p["rect"])
+                self._add_impact(p)
                 continue
-            if -50 <= p["rect"].x <= level.width + 50:
+            if (-50 <= p["rect"].x <= level.width + 50
+                    and -300 <= p["rect"].y <= level.height + 100):
                 alive_projectiles.append(p)
         self.projectiles = alive_projectiles
 
@@ -505,86 +602,118 @@ class Boss(Enemy):
     # ------------------------------------------------------------------
     # Visual (spritesheet). Nada daqui altera estado de combate.
     # ------------------------------------------------------------------
-    def _add_impact(self, rect):
+    def _add_impact(self, projectile):
+        """Faísca/explosão no ponto onde um projétil acabou (acertou ou se dissipou)."""
         if self.sprites:
-            self.impacts.append({"x": rect.centerx, "y": rect.centery, "t": 0})
+            rect = projectile["rect"]
+            self.impacts.append({"x": rect.centerx, "y": rect.centery, "t": 0,
+                                 "kind": projectile["kind"]})
+
+    def _strike_duration(self, kind):
+        """Duração (frames) da animação de execução de cada golpe."""
+        if kind == Boss.ATTACK_SLAM:
+            return settings.BOSS_SLAM_ACTIVE_FRAMES
+        if kind == Boss.ATTACK_BARRAGE:
+            return len(boss_sprites.BARRAGE_RELEASE) * settings.BOSS_BARRAGE_RELEASE_FRAME_TICKS
+        return settings.BOSS_ORB_RELEASE_FRAMES
+
+    @staticmethod
+    def _impact_duration(imp):
+        if imp["kind"] == "embers":
+            return settings.BOSS_SLAM_EMBER_FRAMES
+        return len(boss_sprites.IMPACT_SEQ[imp["kind"]]) * boss_sprites.IMPACT_FRAME_TICKS
+
+    def _spawn_embers(self):
+        """Brasas que se dissipam no chão dos dois lados, quando a erupção do slam termina."""
+        if not self.sprites:
+            return
+        for side in (-1, 1):
+            self.impacts.append({"x": self.rect.centerx + side * settings.BOSS_SLAM_EMBER_OFFSET,
+                                 "y": self.rect.bottom, "t": 0, "kind": "embers", "side": side})
 
     def _update_visual(self):
         self.anim_tick += 1
+        if self.state == Boss.STATE_CHASE and abs(self.vel_x) > 0.1:
+            self.walk_tick += 1
+        else:
+            self.walk_tick = 0
         if self.phase_flash_timer > 0:
             self.phase_flash_timer -= 1
 
         # Golpe executado neste frame -> começa a animação de execução.
-        if self.attack_triggered_this_frame in (Boss.ATTACK_SLAM, Boss.ATTACK_BARRAGE):
+        if self.attack_triggered_this_frame in (Boss.ATTACK_SLAM, Boss.ATTACK_BARRAGE, Boss.ATTACK_ORB):
             self.strike_kind = self.attack_triggered_this_frame
             self.strike_tick = 0
         elif self.strike_kind:
             self.strike_tick += 1
 
-        if self.strike_kind == Boss.ATTACK_SLAM and self.strike_tick >= settings.BOSS_SLAM_ACTIVE_FRAMES:
-            self.strike_kind = None
-        elif (self.strike_kind == Boss.ATTACK_BARRAGE
-              and self.strike_tick >= 2 * settings.BOSS_BARRAGE_RELEASE_FRAME_TICKS):
+        if self.strike_kind and self.strike_tick >= self._strike_duration(self.strike_kind):
+            if self.strike_kind == Boss.ATTACK_SLAM:
+                self._spawn_embers()
             self.strike_kind = None
 
         for imp in self.impacts:
             imp["t"] += 1
-        self.impacts = [i for i in self.impacts
-                        if i["t"] < len(boss_sprites.BURST_FRAMES) * 3]
+        self.impacts = [i for i in self.impacts if i["t"] < self._impact_duration(i)]
 
     def _body_frame_name(self):
         """Quadro do corpo conforme o estado atual da máquina de estados."""
+        S = boss_sprites
         if self.state == Boss.STATE_DASH:
-            # Sem sprite de investida: reaproveita a caminhada, mais rápida.
-            return boss_sprites.frame_name(
-                "walk", (self.anim_tick // max(1, settings.BOSS_CHARGE_FRAME_TICKS)) % 8)
+            # arranque (1 quadro) e depois a corrida em ciclo; acompanha o avanço real
+            elapsed = max(0, settings.BOSS_CHARGE_MAX_FRAMES - self.charge_timer)
+            ticks = max(1, settings.BOSS_CHARGE_FRAME_TICKS)
+            if elapsed < 2 * ticks:
+                return S.CHARGE_LAUNCH
+            return S.CHARGE_RUN[((elapsed - 2 * ticks) // ticks) % len(S.CHARGE_RUN)]
 
         if self.state == Boss.STATE_MELEE:
             return self._melee_frame_name()
 
         if self.state == Boss.STATE_TELEGRAPH:
-            if self.attack_type in (Boss.ATTACK_SLAM, Boss.ATTACK_CHARGE):
-                anim = "slam_windup"
-                total = (settings.BOSS_SLAM_TELEGRAPH if self.attack_type == Boss.ATTACK_SLAM
-                         else settings.BOSS_CHARGE_TELEGRAPH)
-            else:
-                anim, total = "barrage_charge", settings.BOSS_BARRAGE_TELEGRAPH
-            count = len(boss_sprites.BODY_ANIMS[anim])
-            elapsed = max(0, total - self.telegraph_timer)
-            return boss_sprites.frame_name(anim, min(count - 1, elapsed * count // max(1, total)))
+            table, total = {
+                Boss.ATTACK_SLAM: (S.SLAM_WINDUP, settings.BOSS_SLAM_TELEGRAPH),
+                Boss.ATTACK_CHARGE: (S.CHARGE_WINDUP, settings.BOSS_CHARGE_TELEGRAPH),
+                Boss.ATTACK_ORB: (S.ORB_WINDUP, settings.BOSS_ORB_TELEGRAPH),
+            }.get(self.attack_type, (S.BARRAGE_CHARGE, settings.BOSS_BARRAGE_TELEGRAPH))
+            return S.weighted_frame(table, total - self.telegraph_timer, total)
 
         if self.strike_kind == Boss.ATTACK_SLAM:
-            idx = min(3, self.strike_tick // settings.BOSS_SLAM_STRIKE_FRAME_TICKS)
-            return boss_sprites.frame_name("slam_strike", idx)
+            return S.weighted_frame(S.SLAM_STRIKE, self.strike_tick, settings.BOSS_SLAM_ACTIVE_FRAMES)
         if self.strike_kind == Boss.ATTACK_BARRAGE:
-            idx = min(1, self.strike_tick // settings.BOSS_BARRAGE_RELEASE_FRAME_TICKS)
-            return boss_sprites.frame_name("barrage_release", idx)
+            return S.weighted_frame(S.BARRAGE_RELEASE, self.strike_tick,
+                                    self._strike_duration(Boss.ATTACK_BARRAGE))
+        if self.strike_kind == Boss.ATTACK_ORB:
+            return S.weighted_frame(S.ORB_RELEASE, self.strike_tick, settings.BOSS_ORB_RELEASE_FRAMES)
 
         if self.state in (Boss.STATE_ATTACK, Boss.STATE_RECOVER):
-            return boss_sprites.frame_name("recover", 0)
+            if self.attack_type == Boss.ATTACK_CHARGE:
+                elapsed = max(0, self.recover_total - self.recover_timer)
+                hit_frames = settings.BOSS_CHARGE_HIT_POSE_FRAMES if self.charge_hit else 0
+                if elapsed < hit_frames:
+                    return S.CHARGE_HIT
+                if elapsed < hit_frames + settings.BOSS_CHARGE_SKID_FRAMES:
+                    return S.CHARGE_SKID
+                return S.IDLE_FRAME
+            return S.RECOVER_FRAME.get(self.attack_type, S.IDLE_FRAME)
 
-        if abs(self.vel_x) > 0.1:
-            ticks = (settings.BOSS_WALK_FRAME_TICKS_RAGE if self.phase2
-                     else settings.BOSS_WALK_FRAME_TICKS)
-            return boss_sprites.frame_name("walk", (self.anim_tick // ticks) % 8)
-        return boss_sprites.frame_name("idle", (self.anim_tick // settings.BOSS_IDLE_FRAME_TICKS) % 8)
+        # Perseguindo: ciclo de caminhada; parado: idle estável.
+        if self.walk_tick > 0:
+            ticks = max(1, settings.BOSS_WALK_FRAME_TICKS_RAGE if self.phase2
+                        else settings.BOSS_WALK_FRAME_TICKS)
+            return S.WALK_FRAMES[(self.walk_tick // ticks) % len(S.WALK_FRAMES)]
+        return S.IDLE_FRAME
 
     def _melee_frame_name(self):
-        """Golpe curto reaproveita a pose do slam: braços erguidos no aviso, os 3
-        primeiros quadros do impacto (chamas ainda dentro do alcance da hitbox) no
-        golpe e a postura baixa de recuperação."""
+        """Golpe curto = sequência do soco poderoso: preparação -> braço/carga ->
+        impacto (na etapa em que a hitbox existe) -> recuperação."""
+        S = boss_sprites
         if self.melee_stage == Boss.MELEE_WINDUP:
             total = settings.BOSS_MELEE_WINDUP_FRAMES
-            count = len(boss_sprites.BODY_ANIMS["slam_windup"])
-            elapsed = max(0, total - self.melee_timer)
-            start = self.melee_windup_start
-            idx = min(count - 1, start + (count - start) * elapsed // max(1, total))
-            return boss_sprites.frame_name("slam_windup", idx)
+            return S.weighted_frame(S.MELEE_WINDUP, total - self.melee_timer, total)
         if self.melee_stage == Boss.MELEE_STRIKE:
-            total = settings.BOSS_MELEE_ACTIVE_FRAMES
-            elapsed = max(0, total - self.melee_timer)
-            return boss_sprites.frame_name("slam_strike", min(2, elapsed * 3 // max(1, total)))
-        return boss_sprites.frame_name("recover", 0)
+            return S.MELEE_STRIKE[0][0]
+        return S.MELEE_RECOVER[0][0]
 
     def _body_tint(self):
         if self.hit_flash_timer > 0:
@@ -596,30 +725,31 @@ class Boss(Enemy):
             return "rage_flash"
         if self.state == Boss.STATE_TELEGRAPH and (self.telegraph_timer // 4) % 2 == 0:
             return {Boss.ATTACK_SLAM: "tele_slam",
-                    Boss.ATTACK_CHARGE: "tele_charge"}.get(self.attack_type, "tele_barrage")
+                    Boss.ATTACK_CHARGE: "tele_charge",
+                    Boss.ATTACK_ORB: "tele_orb"}.get(self.attack_type, "tele_barrage")
         if self.phase2:
             return "rage"
         return None
 
-    def _draw_slam_wave(self, surface, camera_x):
-        """Onda de choque no chão (efeito avulso), sincronizada com os quadros
-        de impacto do corpo. Fica ATRÁS do corpo (e, no jogo, atrás de Kael)."""
-        t = self.strike_tick
-        stage = t // 3
-        if stage < len(boss_sprites.WAVE_STAGES):
-            name = boss_sprites.WAVE_STAGES[stage]
-            alpha = 255
-        else:
-            name = "wave_full"
-            fade_start = settings.BOSS_SLAM_ACTIVE_FRAMES - 4
-            alpha = 255 if t < fade_start else max(0, 255 * (settings.BOSS_SLAM_ACTIVE_FRAMES - t) // 4)
-        if alpha <= 0:
-            return
-        img, (ox, oy) = self.sprites.get(name, self.facing_right)
-        if alpha < 255:
-            img = img.copy()
-            img.set_alpha(alpha)
-        surface.blit(img, (self.rect.centerx - camera_x + ox, self.rect.bottom + 1 + oy))
+    def _draw_impacts(self, surface, camera_x):
+        spr = self.sprites
+        for imp in self.impacts:
+            if imp["kind"] == "embers":
+                # brasas do slam: ficam no chão, espelhadas conforme o lado, e somem aos poucos
+                img, (ox, oy) = spr.get("fx_embers", imp["side"] > 0, None, 1.0)
+                alpha = max(0, 255 * (settings.BOSS_SLAM_EMBER_FRAMES - imp["t"]) // settings.BOSS_SLAM_EMBER_FRAMES)
+                if alpha <= 0:
+                    continue
+                if alpha < 255:
+                    img = img.copy()
+                    img.set_alpha(alpha)
+                surface.blit(img, (imp["x"] - camera_x + ox, imp["y"] + oy))
+                continue
+            seq = boss_sprites.IMPACT_SEQ[imp["kind"]]
+            name = seq[min(len(seq) - 1, imp["t"] // boss_sprites.IMPACT_FRAME_TICKS)]
+            scale = settings.BOSS_ORB_IMPACT_SCALE if imp["kind"] == "orb" else settings.BOSS_IMPACT_SCALE
+            img, (ox, oy) = spr.get(name, True, None, scale)
+            surface.blit(img, (imp["x"] - camera_x + ox, imp["y"] + oy))
 
     def _draw_sprite_boss(self, surface, camera_x):
         spr = self.sprites
@@ -633,22 +763,22 @@ class Boss(Enemy):
             gy = self.rect.bottom - int(glow.get_height() * 0.92)
             surface.blit(glow, (gx, gy))
 
-        if self.strike_kind == Boss.ATTACK_SLAM:
-            self._draw_slam_wave(surface, camera_x)
-
-        img, (ox, oy) = spr.get(self._body_frame_name(), self.facing_right, self._body_tint())
+        # O quadro é posicionado pelos PÉS (âncora do manifesto) sobre o chão do
+        # hitbox; o tamanho do sprite nunca muda a posição física do boss.
+        name = self._body_frame_name()
+        img, (ox, oy) = spr.get(name, self.facing_right, self._body_tint())
         surface.blit(img, (self.rect.centerx - camera_x + ox, self.rect.bottom + oy))
 
-        for p in self.projectiles:
-            shard = spr.get_shard(p["vx"], p["vy"])
-            pr = p["rect"]
-            surface.blit(shard, (pr.centerx - camera_x - shard.get_width() // 2,
-                                 pr.centery - shard.get_height() // 2))
+        self._draw_impacts(surface, camera_x)
 
-        for imp in self.impacts:
-            name = boss_sprites.BURST_FRAMES[min(len(boss_sprites.BURST_FRAMES) - 1, imp["t"] // 3)]
-            img, (ox, oy) = spr.get(name, True, None, settings.BOSS_IMPACT_SCALE)
-            surface.blit(img, (imp["x"] - camera_x + ox, imp["y"] + oy))
+        for p in self.projectiles:
+            pr = p["rect"]
+            if p["kind"] == "orb":
+                img = spr.get_orb(p["vx"], p["vy"])
+            else:
+                img = spr.get_shard(p["t"] + p["rect"].x // 7)
+            surface.blit(img, (pr.centerx - camera_x - img.get_width() // 2,
+                               pr.centery - img.get_height() // 2))
 
     def draw(self, surface, camera_x):
         if not self.alive:
@@ -690,7 +820,8 @@ class Boss(Enemy):
         color = (255, 255, 255) if self.hit_flash_timer > 0 else self.color
         if self.state == Boss.STATE_TELEGRAPH:
             telegraph_color = {Boss.ATTACK_SLAM: (255, 210, 80),
-                               Boss.ATTACK_CHARGE: (80, 200, 230)}.get(self.attack_type, (200, 100, 230))
+                               Boss.ATTACK_CHARGE: (80, 200, 230),
+                               Boss.ATTACK_ORB: (230, 60, 80)}.get(self.attack_type, (200, 100, 230))
             flash = telegraph_color if (self.telegraph_timer // 4) % 2 == 0 else color
             pygame.draw.rect(surface, flash, r, border_radius=6)
         else:

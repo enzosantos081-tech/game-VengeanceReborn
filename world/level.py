@@ -1,17 +1,14 @@
 """
 world/level.py
-Responsável pela criação e gerenciamento da fase. A Fase 1 (Jornada) é
-dividida visualmente em 8 regiões dentro do MESMO mapa de 12.800 px
-(sem telas de carregamento separadas):
-  Regiões 1 a 4 - Área inicial, floresta, ruínas e primeira aproximação do castelo
-  Região 5 - Desfiladeiro
-  Região 6 - Caminho das cinzas
-  Região 7 - Muralha exterior
-  Região 8 - Portões do castelo (acesso à Fase 2)
-Todas as regiões compartilham a MESMA identidade visual (ver
-world/background.py) - são só trechos de conteúdo (plataformas,
-inimigos, decoração) dentro de um único cenário contínuo, não biomas
-separados.
+Responsável pela criação e gerenciamento da fase. A Fase 1 (Jornada) tem
+30 telas (30 x 1024 = 30.720 px) no MESMO mapa, sem telas de carregamento:
+  Floresta - 15 telas (x = 0 a 15.360), com o Núcleo/loja no início
+  Caverna  - 15 telas (x = 15.360 a 30.720), com o puzzle da fenda e o
+             salão final que leva ao castelo de Vharok (acesso à Fase 2)
+Há apenas 3 checkpoints: meio da floresta, transição floresta -> caverna e
+meio da caverna. O mapa é montado por módulos de terreno (ver
+_JourneyBuilder); o fundo em parallax faz crossfade floresta -> caverna no
+limite entre as duas áreas (world/background.py).
 A Fase 2 (Castelo de Vharok) é construída separadamente por build_boss_level().
 """
 
@@ -147,6 +144,10 @@ class Level:
         """Retorna o valor total de moedas coletadas neste frame (0 se
         nenhuma), usado por core/game.py para disparar o som de moeda."""
         for enemy in self.enemies:
+            # Fase de 30 telas: inimigos muito longe de Kael ficam parados no
+            # ponto de spawn (não há como vê-los nem como eles o alcançarem).
+            if abs(enemy.rect.centerx - player.rect.centerx) > ENEMY_ACTIVE_RANGE:
+                continue
             enemy.update(self, player)
         self.enemies = [e for e in self.enemies if True]  # mantidos p/ desenhar corpo caído; sem despawn
         self.obstacles.update(player, ground_y=GROUND_Y, solids=self.platforms.rects())
@@ -215,7 +216,10 @@ class Level:
         for cp in self.checkpoints:
             cp.draw(surface, camera_x)
 
+        screen_center = camera_x + settings.SCREEN_WIDTH / 2
         for enemy in self.enemies:
+            if abs(enemy.rect.centerx - screen_center) > settings.SCREEN_WIDTH / 2 + ENEMY_DRAW_MARGIN:
+                continue   # longe demais para aparecer (nem projéteis dele chegam à tela)
             enemy.draw(surface, camera_x)
             enemy.draw_health_bar(surface, camera_x)
 
@@ -232,262 +236,533 @@ def _add_decor(level, rng, start, end):
         x += w * rng.uniform(0.6, 1.1)
 
 
+# ---------- Ajudantes de posicionamento de moedas ----------
+# A moeda é um quadrado de COIN_SIZE px e Level.coins.add() recebe o canto
+# superior esquerdo. Estes ajudantes recebem o CENTRO x e a superfície onde a
+# moeda "descansa" (topo do chão/plataforma): assim a altura é sempre derivada
+# da geometria, e moedas não nascem mais dentro de plataformas, no fundo de
+# poços ou fora do alcance. Distância padrão: o topo da moeda fica COIN_LIFT px
+# acima da superfície, de modo que o jogador a pega só andando.
+COIN_SIZE = 16
+COIN_LIFT = 40
+COIN_STEP = 40
+
+
+def _coin(level, cx, surface_y, lift=COIN_LIFT, value=None):
+    kwargs = {} if value is None else {"value": value}
+    level.coins.add(round(cx - COIN_SIZE / 2), round(surface_y - lift), **kwargs)
+
+
+def _coins_centered(level, cx, count, surface_y=GROUND_Y, step=COIN_STEP, lift=COIN_LIFT):
+    """'count' moedas em fileira, centralizadas em cx, sobre a superfície dada."""
+    start = cx - (count - 1) * step / 2
+    for i in range(count):
+        _coin(level, start + i * step, surface_y, lift)
+
+
+def _coins_on(level, platform, count=1, step=COIN_STEP, lift=COIN_LIFT):
+    """Moedas centralizadas sobre o topo de uma plataforma."""
+    _coins_centered(level, platform.rect.centerx, count, platform.rect.top, step, lift)
+
+
+def _coin_arc(level, cx_from, cx_to, surface_y=GROUND_Y, rise=45, count=3, base=COIN_LIFT):
+    """Arco de moedas sobre um vão ou espinho: as pontas ficam a 'base' px da
+    superfície e o meio sobe 'rise' px; é a recompensa de saltar o perigo.
+    Sobre ESPINHOS use base=SPIKE_ARC_BASE: as pontas ficam acima da cabeça de
+    quem anda no chão, então só se pega a moeda saltando (nunca se pisa no
+    espinho para pegá-la). rise + base <= ~110 mantém o arco no alcance do pulo."""
+    for i in range(count):
+        t = i / (count - 1) if count > 1 else 0.5
+        _coin(level, cx_from + (cx_to - cx_from) * t, surface_y,
+              lift=base + rise * 4 * t * (1 - t))
+
+
+SPIKE_ARC_BASE = 72
+
+
+# ======================================================================
+# Fase 1 - Jornada (30 telas): Floresta (15 telas) + Caverna (15 telas)
+# ======================================================================
+# A Jornada é montada por MÓDULOS (trechos prontos de terreno, perigos,
+# inimigos e moedas) encadeados da esquerda para a direita. Cada módulo
+# começa e termina em chão na altura GROUND_Y, então qualquer ordem de
+# módulos continua jogável. Os módulos reaproveitam as geometrias da fase
+# antiga (vãos <= 140 px, degraus <= 90 px, espinhos longe das bordas).
+#
+# Para mudar o tamanho das áreas basta editar FOREST_SCREENS / CAVE_SCREENS
+# (e ajustar a lista de módulos em _JourneyBuilder.build()).
+FOREST_SCREENS = 15
+CAVE_SCREENS = 15
+FOREST_END = FOREST_SCREENS * settings.SCREEN_WIDTH                       # 15360: limite floresta | caverna
+JOURNEY_WIDTH = (FOREST_SCREENS + CAVE_SCREENS) * settings.SCREEN_WIDTH   # 30720
+GROUND_H = 64
+
+# Com a fase bem maior, só inimigos perto de Kael são atualizados/desenhados
+# (os distantes ficam parados no ponto de spawn). Os valores são folgados:
+# o alcance do ranged é 320 px e o projétil dele percorre no máximo ~1100 px.
+ENEMY_ACTIVE_RANGE = 2600
+ENEMY_DRAW_MARGIN = 1300
+
+
+class _JourneyBuilder:
+    """Monta a Fase 1 por módulos. Ver comentário acima."""
+
+    def __init__(self, level):
+        self.level = level
+        self.plat = level.platforms
+        self.obst = level.obstacles
+        self.no_stalactite = []     # [(x0, x1)] trechos sem estalactite-armadilha comum
+        self.checkpoint_xs = []
+
+    # ---------- Primitivas ----------
+    def ground(self, x, w):
+        return self.plat.add(x, GROUND_Y, w, GROUND_H, is_ground=True)
+
+    def spike(self, x, w=64, arc=True):
+        self.obst.add_spike(x, GROUND_Y - 16, width=w)
+        if arc:
+            _coin_arc(self.level, x - 4, x + w + 4, rise=36, base=SPIKE_ARC_BASE)
+
+    def basic(self, cx, surface_y=GROUND_Y):
+        self.level.enemies.append(BasicEnemy(
+            round(cx - settings.BASIC_ENEMY_WIDTH / 2), surface_y - settings.BASIC_ENEMY_HEIGHT))
+
+    def ranged(self, cx, surface_y=GROUND_Y):
+        self.level.enemies.append(RangedEnemy(
+            round(cx - settings.RANGED_ENEMY_WIDTH / 2), surface_y - settings.RANGED_ENEMY_HEIGHT))
+
+    def flyer(self, cx, height, patrol):
+        self.level.enemies.append(FlyingEnemy(round(cx), GROUND_Y - height, patrol_range=patrol))
+
+    def checkpoint(self, cx):
+        self.checkpoint_xs.append(cx)
+        self.level.add_checkpoint(round(cx - settings.CHECKPOINT_WIDTH / 2),
+                                  GROUND_Y - settings.CHECKPOINT_HEIGHT)
+
+    def story(self, x, text, max_y=None):
+        self.level.add_story_trigger(round(x), text, max_y=max_y)
+
+    # ---------- Trechos neutros ----------
+    def plain(self, x, w, basic=0, ranged=0, flyer=0):
+        """Chão reto; inimigos distribuídos igualmente ao longo dele."""
+        self.ground(x, w)
+        walkers = ["b"] * basic + ["r"] * ranged
+        for i, kind in enumerate(walkers):
+            cx = x + w * (i + 1) / (len(walkers) + 1)
+            (self.basic if kind == "b" else self.ranged)(cx)
+        for i in range(flyer):
+            self.flyer(x + w * (i + 1) / (flyer + 1), 150 + 30 * (i % 2), 120)
+        _coins_centered(self.level, x + w * 0.25, 2)
+        _coins_centered(self.level, x + w * 0.75, 2)
+        return x + w
+
+    def rest(self, x, end_x, cp_x):
+        """Chão reto com um checkpoint em cp_x. Inimigos só longe do checkpoint."""
+        assert x <= cp_x - 200 and cp_x + 200 <= end_x, (x, cp_x, end_x)
+        self.ground(x, end_x - x)
+        p = x + 250
+        while p <= cp_x - 320:
+            self.basic(p)
+            p += 380
+        _coins_centered(self.level, cp_x - 150, 2)
+        _coins_centered(self.level, cp_x + 150, 2)
+        self.checkpoint(cp_x)
+        self.no_stalactite.append((cp_x - 280, cp_x + 280))
+        return end_x
+
+    # ---------- Módulos da floresta ----------
+    def spike_run(self, x, ranged=False):
+        w = 560
+        self.ground(x, w)
+        self.spike(x + 260)
+        if ranged:
+            self.ranged(x + 490)
+        else:
+            self.basic(x + 430)
+        _coins_centered(self.level, x + 110, 2)
+        return x + w
+
+    def gap(self, x, g, hard=False):
+        """Vão simples de g px (<= 130). Largura total: 680 + g."""
+        self.ground(x, 320)
+        gx = x + 320
+        self.ground(gx + g, 360)
+        _coin_arc(self.level, gx - 30, gx + g + 30, rise=45)
+        self.basic(x + 160)
+        self.basic(gx + g + (190 if hard else 230))
+        self.flyer(gx + g / 2, 140, 90)
+        if hard:
+            self.ranged(gx + g + 310)
+        return gx + g + 360
+
+    def steps(self, x, secret=False, hard=False):
+        """Duas plataformas sobre um vão de 540 px (largura 1100)."""
+        self.ground(x, 240)
+        gs = x + 240
+        a = self.plat.add(gs + 100, GROUND_Y - 90, 140, 24)
+        b = self.plat.add(gs + 320, GROUND_Y - 160, 140, 24)
+        self.ground(gs + 540, 320)
+        _coins_on(self.level, a)
+        _coins_on(self.level, b)
+        self.basic(x + 120)
+        self.ranged(a.rect.left + 55, GROUND_Y - 90)
+        self.basic(gs + 540 + 170)
+        if hard:
+            self.flyer(gs + 270, 240, 130)
+        if secret:
+            # Área secreta acima do trecho: moedas de maior valor, opcional.
+            self.plat.add(gs + 200, GROUND_Y - 250, 70, 18)
+            self.plat.add(gs + 370, GROUND_Y - 320, 70, 18)
+            top = self.plat.add(gs + 540, GROUND_Y - 380, 140, 18)
+            _coins_centered(self.level, top.rect.centerx, 3, top.rect.top, lift=COIN_LIFT)
+            for coin in self.level.coins.coins[-3:]:
+                coin.value = settings.SECRET_COIN_VALUE
+            self.story(gs + 570, "Uma area secreta escondida sobre a floresta... valeu a pena explorar.",
+                       max_y=GROUND_Y - 300)
+        return gs + 540 + 320
+
+    def moving_gap(self, x):
+        """Vão de 120 px com elevador (largura 880)."""
+        self.ground(x, 320)
+        gs = x + 320
+        self.plat.add_moving(gs + 20, GROUND_Y - 40, 90, 20, offset_x=0, offset_y=-70, speed=1.2)
+        self.ground(gs + 120, 440)
+        _coin_arc(self.level, gs - 30, gs + 150, rise=45)
+        self.spike(gs + 120 + 180)
+        self.basic(x + 170)
+        self.basic(gs + 120 + 340)
+        return gs + 560
+
+    def ruins(self, x, hard=False):
+        """Plataformas quebradiças + uma fixa sobre um vão de 760 px (largura 1240)."""
+        self.ground(x, 220)
+        gs = x + 220
+        c1 = self.plat.add_crumbling(gs + 100, GROUND_Y - 60, 120, 24)
+        mid = self.plat.add(gs + 320, GROUND_Y - 140, 120, 24)
+        c2 = self.plat.add_crumbling(gs + 540, GROUND_Y - 60, 120, 24)
+        self.ground(gs + 760, 260)
+        for p in (c1, mid, c2):
+            _coins_on(self.level, p)
+        self.basic(x + 110)
+        self.flyer(gs + 380, 190, 150)
+        self.basic(gs + 760 + 150)
+        if hard:
+            self.ranged(mid.rect.centerx, GROUND_Y - 140)
+        return gs + 760 + 260
+
+    def h_lift(self, x, gap=360, travel=160):
+        """Plataforma móvel horizontal sobre um vão grande (largura 620 + gap)."""
+        self.ground(x, 260)
+        gs = x + 260
+        lift = self.plat.add_moving(gs + 100, GROUND_Y - 100, 100, 20,
+                                    offset_x=travel, offset_y=0, speed=1.6)
+        self.ground(gs + gap, 300)
+        _coins_centered(self.level, lift.rect.centerx + travel / 2, 2, lift.rect.top)
+        self.basic(x + 130)
+        self.spike(gs + gap + 130, 48)
+        self.ranged(gs + gap + 235)
+        return gs + gap + 300
+
+    def double_spike(self, x):
+        w = 760
+        self.ground(x, w)
+        self.spike(x + 230)
+        self.spike(x + 480)
+        self.basic(x + 110)
+        self.flyer(x + 380, 150, 110)
+        self.basic(x + 650)
+        return x + w
+
+    def arena(self, x):
+        """Chão de 800 px com vários inimigos e uma prateleira."""
+        w = 800
+        self.ground(x, w)
+        shelf = self.plat.add(x + 330, GROUND_Y - 100, 140, 22)
+        _coins_on(self.level, shelf, 2)
+        self.basic(x + 190)
+        self.ranged(shelf.rect.centerx, GROUND_Y - 100)
+        self.basic(x + 650)
+        self.flyer(x + 420, 170, 150)
+        return x + w
+
+    def pit_stairs(self, x):
+        """Poço de 400 px com duas plataformas escalonadas (largura 960)."""
+        self.ground(x, 260)
+        gs = x + 260
+        p1 = self.plat.add(gs + 80, GROUND_Y - 70, 100, 22)
+        p2 = self.plat.add(gs + 230, GROUND_Y - 130, 100, 22)
+        self.ground(gs + 400, 300)
+        _coins_on(self.level, p1)
+        _coins_on(self.level, p2)
+        self.basic(x + 130)
+        self.flyer(gs + 200, 200, 120)
+        self.basic(gs + 400 + 170)
+        return gs + 400 + 300
+
+    # ---------- Módulos da caverna ----------
+    def cave_stairs(self, x):
+        """Escada sobre espinho e vão de 140 px (largura 1140)."""
+        self.ground(x, 440)
+        self.ground(x + 580, 560)
+        self.obst.add_spike(x + 100, GROUND_Y - 16, width=64)
+        a1 = self.plat.add(x + 190, GROUND_Y - 80, 110, 22)
+        a2 = self.plat.add(x + 350, GROUND_Y - 140, 110, 22)
+        a3 = self.plat.add(x + 510, GROUND_Y - 80, 110, 22)
+        cb = self.plat.add(x + 840, GROUND_Y - 90, 140, 22)
+        self.obst.add_spike(x + 880, GROUND_Y - 16, width=64)
+        for p in (a1, a2, a3):
+            _coins_on(self.level, p)
+        _coins_on(self.level, cb, 2)
+        self.basic(x + 40)
+        self.ranged(x + 650)
+        self.flyer(x + 340, 210, 130)
+        return x + 1140
+
+    def ashes(self, x):
+        """Ponte quebradiça, arcos sobre espinhos e elevador (largura 1600)."""
+        self.ground(x, 320)
+        self.ground(x + 460, 340)
+        self.ground(x + 800, 450)
+        self.ground(x + 1380, 220)
+        cb = self.plat.add_crumbling(x + 345, GROUND_Y - 60, 90, 22)
+        c2 = self.plat.add(x + 570, GROUND_Y - 90, 120, 22)
+        c3 = self.plat.add(x + 740, GROUND_Y - 150, 110, 22)
+        c4 = self.plat.add(x + 900, GROUND_Y - 90, 110, 22)
+        self.plat.add_moving(x + 1265, GROUND_Y - 45, 100, 20, offset_x=0, offset_y=-75, speed=1.35)
+        self.obst.add_spike(x + 620, GROUND_Y - 16, width=64)
+        self.obst.add_spike(x + 910, GROUND_Y - 16, width=80)
+        _coins_centered(self.level, x + 80, 2)
+        _coins_on(self.level, cb)
+        _coins_on(self.level, c2, 2)
+        _coins_on(self.level, c3, 2)
+        _coins_on(self.level, c4)
+        _coin(self.level, x + 1315, GROUND_Y, lift=175)
+        _coins_centered(self.level, x + 1460, 2)
+        self.basic(x + 540)
+        self.basic(x + 1060)
+        self.ranged(x + 1400)
+        self.flyer(x + 720, 190, 140)
+        return x + 1600
+
+    def fenda(self, x):
+        """Puzzle obrigatório da fenda (largura 1600): o salto é largo demais;
+        Kael precisa cair na fenda, o que derruba a grande estalactite que
+        vira ponte permanente depois do respawn."""
+        pit0, pit1 = x + 400, x + 900
+        self.ground(x, 400)
+        self.ground(pit1, 700)
+        self.obst.add_spike(x + 110, GROUND_Y - 16, width=64)
+        self.obst.add_spike(x + 1040, GROUND_Y - 16, width=80)
+        self.obst.add_stalactite(
+            x + 500, GROUND_Y - 500, width=300, height=245,
+            trigger_range=0, variant=3, visual_size=(300, 245),
+            fall_to_y=690, trigger_on_death_zone=(pit0, pit1),
+            persistent_after_landing=True,
+        )
+        self.no_stalactite.append((pit0 - 150, pit1 + 150))
+        d1 = self.plat.add(x + 1140, GROUND_Y - 85, 120, 22)
+        d2 = self.plat.add(x + 1310, GROUND_Y - 150, 120, 22)
+        _coins_centered(self.level, x + 330, 2)
+        # moedas no topo da pedra do puzzle (y=449 depois que ela cai)
+        _coins_centered(self.level, x + 650, 3, GROUND_Y - 63)
+        _coin_arc(self.level, x + 1046, x + 1114, rise=36, base=SPIKE_ARC_BASE)
+        _coins_on(self.level, d1)
+        _coins_on(self.level, d2)
+        _coins_centered(self.level, x + 1560, 2)
+        self.basic(x + 280)
+        self.ranged(x + 970)
+        self.flyer(x + 1200, 220, 150)
+        self.story(x + 100, "A muralha exterior está em ruínas, mas os guardas ainda protegem o acesso.")
+        self.story(x + 250, "A fenda e larga demais para um salto comum. O teto rachado parece instavel...")
+        return x + 1600
+
+    def gates(self, x):
+        """Pontes quebradiças e arcos sobre espinhos e vãos de 120 px (largura 1600)."""
+        self.ground(x, 300)
+        self.ground(x + 420, 480)
+        self.ground(x + 1020, 580)
+        e1 = self.plat.add_crumbling(x + 315, GROUND_Y - 55, 90, 22)
+        e2 = self.plat.add(x + 550, GROUND_Y - 85, 120, 22)
+        e3 = self.plat.add(x + 720, GROUND_Y - 150, 120, 22)
+        e4 = self.plat.add(x + 905, GROUND_Y - 85, 110, 22)
+        f = self.plat.add(x + 1200, GROUND_Y - 95, 140, 22)
+        self.obst.add_spike(x + 580, GROUND_Y - 16, width=64)
+        self.obst.add_spike(x + 1270, GROUND_Y - 16, width=64)
+        _coins_centered(self.level, x + 90, 2)
+        for p in (e1, e2, e3, e4):
+            _coins_on(self.level, p)
+        _coins_on(self.level, f, 2)
+        _coins_centered(self.level, x + 1440, 2)
+        self.basic(x + 500)
+        self.basic(x + 840)
+        self.ranged(x + 1200)
+        self.flyer(x + 700, 210, 160)
+        return x + 1600
+
+    def double_gap(self, x, hard=False):
+        """Duas ilhas e dois vãos de 140 px em sequência (largura 1080)."""
+        self.ground(x, 300)
+        self.ground(x + 440, 200)
+        self.ground(x + 780, 300)
+        _coin_arc(self.level, x + 270, x + 470, rise=45)
+        _coin_arc(self.level, x + 610, x + 810, rise=45)
+        self.basic(x + 120)
+        self.flyer(x + 370, 150, 100)
+        self.flyer(x + 710, 170, 100)
+        self.ranged(x + 960)
+        if hard:
+            self.spike(x + 780 + 170)
+        return x + 1080
+
+    def crumble_run(self, x, hard=False):
+        """Três plataformas quebradiças sobre um poço de 620 px (largura 1180)."""
+        self.ground(x, 240)
+        gs = x + 240
+        c1 = self.plat.add_crumbling(gs + 80, GROUND_Y - 60, 90, 22)
+        c2 = self.plat.add_crumbling(gs + 260, GROUND_Y - 100, 90, 22)
+        c3 = self.plat.add_crumbling(gs + 440, GROUND_Y - 60, 90, 22)
+        self.ground(gs + 620, 320)
+        for p in (c1, c2, c3):
+            _coins_on(self.level, p)
+        self.basic(x + 120)
+        self.flyer(gs + 300, 190, 130)
+        self.basic(gs + 620 + 130)
+        if hard:
+            self.ranged(gs + 620 + 250)
+        return gs + 620 + 320
+
+    def gauntlet(self, x, count=3):
+        """Corredor de espinhos com atirador no fim (largura 220 + 240 * count)."""
+        w = 220 + 240 * count
+        self.ground(x, w)
+        for i in range(count):
+            self.spike(x + 200 + 240 * i)
+        self.ranged(x + w - 90)
+        self.flyer(x + w * 0.55, 160, 130)
+        return x + w
+
+    def cave_lift(self, x, hard=False):
+        """Plataforma móvel horizontal sobre um vão de 420 px (largura 980)."""
+        self.ground(x, 260)
+        gs = x + 260
+        lift = self.plat.add_moving(gs + 90, GROUND_Y - 70, 100, 20,
+                                    offset_x=220, offset_y=0, speed=1.6)
+        self.ground(gs + 420, 300)
+        _coins_centered(self.level, lift.rect.centerx + 110, 2, lift.rect.top)
+        self.basic(x + 130)
+        self.flyer(gs + 210, 200, 120)
+        self.ranged(gs + 420 + 220)
+        if hard:
+            self.spike(gs + 420 + 100, 48)
+        return gs + 420 + 300
+
+    # ---------- Armadilhas de teto da caverna ----------
+    def ceiling_traps(self, start_x, end_x):
+        import random
+        rng = random.Random(1337)   # seed fixa: fase consistente entre tentativas
+        small = ((30, 42, 500), (34, 46, 470), (30, 42, 490), (34, 46, 480))
+        x = start_x
+        i = 0
+        while x < end_x:
+            if not any(a <= x <= b for a, b in self.no_stalactite):
+                if i % 2 == 0:
+                    sw, sh, off = rng.choice(small)
+                    self.obst.add_stalactite(x, GROUND_Y - off, width=sw, height=sh, trigger_range=44)
+                else:
+                    self.obst.add_ceiling_spike(x, GROUND_Y - rng.randint(485, 500), width=48, height=78)
+            i += 1
+            x += rng.randint(330, 470)
+
+    # ---------- Montagem ----------
+    def build(self):
+        level = self.level
+        forest_mid = FOREST_END // 2                                   # 7680
+        cave_mid = FOREST_END + (JOURNEY_WIDTH - FOREST_END) // 2      # 23040
+
+        # Região inicial (0 - 900): Núcleo do Retorno e loja
+        self.ground(0, 900)
+        level.core_pos = (80, GROUND_Y - settings.PLAYER_HEIGHT)
+        level.player_start = level.core_pos
+        level.shop_zone = ShopZone(300, GROUND_Y - 80, 120, 80)
+        _coins_centered(level, 520, 3)          # logo depois da loja (que termina em x=420)
+        self.story(150, "Kael reconstruiu o Nucleo do Retorno. Sua jornada de vinganca comeca aqui.")
+        self.story(850, "A antiga estrada leva a floresta que outrora protegia sua vila.")
+
+        # ----- FLORESTA, 1a metade (900 - 8010), checkpoint no meio da floresta -----
+        x = 900
+        x = self.plain(x, 500, basic=1)
+        x = self.gap(x, 110)
+        x = self.spike_run(x)
+        x = self.steps(x, secret=True)
+        x = self.moving_gap(x)
+        x = self.plain(x, 420, basic=1)
+        self.story(x, "As Ruinas guardam conhecimento antigo - foi aqui que Kael reconstruiu o Nucleo.")
+        x = self.ruins(x)
+        x = self.double_spike(x)
+        x = self.rest(x, forest_mid + 330, forest_mid)                 # CHECKPOINT 1 (meio da floresta)
+
+        # ----- FLORESTA, 2a metade (até o limite com a caverna) - mais difícil -----
+        x = self.arena(x)
+        x = self.gap(x, 130, hard=True)
+        x = self.spike_run(x, ranged=True)
+        x = self.pit_stairs(x)
+        self.story(x, "O castelo de Vharok se ergue no horizonte. O fim da jornada se aproxima.")
+        x = self.h_lift(x)
+        x = self.steps(x, hard=True)
+        x = self.ruins(x, hard=True)
+        x = self.spike_run(x)
+        self.story(FOREST_END - 330, "O caminho antigo termina num desfiladeiro. Encontre uma passagem segura.")
+        x = self.rest(x, FOREST_END + 330, FOREST_END)                 # CHECKPOINT 2 (transição floresta -> caverna)
+
+        # ----- CAVERNA, 1a metade (até o meio da caverna) -----
+        x = self.cave_stairs(x)
+        x = self.plain(x, 230, basic=1)
+        x = self.gauntlet(x, count=3)
+        x = self.double_gap(x)
+        x = self.cave_lift(x)
+        x = self.crumble_run(x)
+        self.story(x, "A fumaça cobre a estrada. As defesas do castelo estão cada vez mais próximas.")
+        x = self.ashes(x)
+        x = self.rest(x, x + 400, x + 200)                             # CHECKPOINT 3 (meio da caverna)
+        assert self.checkpoint_xs[-1] == cave_mid, self.checkpoint_xs
+
+        # ----- CAVERNA, 2a metade (puzzle da fenda + portões) - mais difícil -----
+        x = self.fenda(x)
+        x = self.gates(x)
+        x = self.cave_lift(x, hard=True)
+        x = self.crumble_run(x, hard=True)
+        x = self.gauntlet(x, count=4)
+
+        # Salão final antes do castelo
+        end = JOURNEY_WIDTH
+        self.story(x + 300, "As portas do castelo se abrem. Vharok o espera la dentro.")
+        self.plain(x, end - x, basic=2, ranged=2, flyer=1)
+        level.boss_trigger = pygame.Rect(end - 100, GROUND_Y - 200, 40, 200)
+
+        # Estalactites-armadilha por toda a caverna (depois do crossfade do fundo)
+        self.ceiling_traps(FOREST_END + 520, end - 400)
+
+        # Gatilhos de história em ordem de x (check_story_triggers percorre a lista em ordem)
+        level.story_triggers.sort(key=lambda t: t["x"])
+
+
 def build_main_level():
-    """Constrói a Fase 1 - Jornada, com oito regiões em um mapa contínuo."""
-    import random
-    rng = random.Random(42)  # seed fixa: fase consistente entre tentativas
+    """Constrói a Fase 1 - Jornada: 30 telas (Floresta 15 + Caverna 15) em um
+    mapa contínuo, com apenas 3 checkpoints (meio da floresta, transição
+    floresta -> caverna e meio da caverna)."""
+    level = Level(JOURNEY_WIDTH, settings.SCREEN_HEIGHT)
+    _JourneyBuilder(level).build()
 
-    # A Jornada agora tem 12.800 px de extensão horizontal. As quatro
-    # regiões originais permanecem intactas; as regiões 5 a 8 ampliam a
-    # travessia antes da entrada para o castelo de Vharok.
-    level_width = 12800
-    level_height = settings.SCREEN_HEIGHT
-    level = Level(level_width, level_height)
-
-    plat = level.platforms
-    ground_h = 64
-
-    # ---------- Região 1: Área inicial (0 - 900) ----------
-    plat.add(0, GROUND_Y, 900, ground_h, is_ground=True)
-    level.core_pos = (80, GROUND_Y - settings.PLAYER_HEIGHT)
-    level.player_start = level.core_pos
-    level.shop_zone = ShopZone(300, GROUND_Y - 80, 120, 80)
-    level.coins.add(420, GROUND_Y - 40)
-    level.coins.add(460, GROUND_Y - 40)
-    level.coins.add(500, GROUND_Y - 40)
-
-    level.add_story_trigger(150, "Kael reconstruiu o Nucleo do Retorno. Sua jornada de vinganca comeca aqui.")
-    level.add_story_trigger(850, "A antiga estrada leva a floresta que outrora protegia sua vila.")
-
-    # ---------- Região 2: Floresta (900 - 3000) ----------
-    plat.add(900, GROUND_Y, 300, ground_h, is_ground=True)
-    # buraco entre 1200 e 1320
-    plat.add(1320, GROUND_Y, 260, ground_h, is_ground=True)
-    plat.add(1680, GROUND_Y - 90, 140, 24)
-    plat.add(1900, GROUND_Y - 160, 140, 24)
-    plat.add(2120, GROUND_Y, 320, ground_h, is_ground=True)
-    # buraco entre 2440 e 2560
-    plat.add(2560, GROUND_Y, 440, ground_h, is_ground=True)
-
-    # Plataforma móvel atravessando o segundo buraco (rota alternativa/mais segura)
-    plat.add_moving(2460, GROUND_Y - 40, 90, 20, offset_x=0, offset_y=-70, speed=1.2)
-
-    # Checkpoint ao fim da Região 2
-    level.add_checkpoint(2900, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-
-    for cx in (960, 1000, 1360, 1400, 1720, 1940, 2160, 2600, 2650, 2700):
-        level.coins.add(cx, GROUND_Y - 40)
-
-    level.obstacles.add_spike(1050, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(2650, GROUND_Y - 16, width=64)
-
-    level.enemies.append(BasicEnemy(1000, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(2200, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(1720, GROUND_Y - 90 - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(1260, GROUND_Y - 140, patrol_range=90))
-
-    # ---------- Área secreta: trecho alto acima da Região 2 ----------
-    # Sequência de plataformas pequenas levando a um esconderijo com moedas
-    # de maior valor - não é necessária para progredir, recompensa exploração.
-    plat.add(1780, GROUND_Y - 250, 70, 18)
-    plat.add(1950, GROUND_Y - 320, 70, 18)
-    plat.add(2120, GROUND_Y - 380, 140, 18)
-    level.coins.add(2150, GROUND_Y - 420, value=settings.SECRET_COIN_VALUE)
-    level.coins.add(2190, GROUND_Y - 420, value=settings.SECRET_COIN_VALUE)
-    level.coins.add(2230, GROUND_Y - 420, value=settings.SECRET_COIN_VALUE)
-    level.add_story_trigger(2150, "Uma area secreta escondida sobre a floresta... valeu a pena explorar.", max_y=GROUND_Y - 300)
-
-    level.add_story_trigger(3000, "As Ruinas guardam conhecimento antigo - foi aqui que Kael reconstruiu o Nucleo.")
-
-    # ---------- Região 3: Ruínas (3000 - 4900) ----------
-    plat.add(3000, GROUND_Y, 220, ground_h, is_ground=True)
-    plat.add_crumbling(3320, GROUND_Y - 60, 120, 24)
-    plat.add(3540, GROUND_Y - 140, 120, 24)
-    plat.add_crumbling(3760, GROUND_Y - 60, 120, 24)
-    plat.add(3980, GROUND_Y, 260, ground_h, is_ground=True)
-    plat.add_moving(4340, GROUND_Y - 100, 100, 20, offset_x=160, offset_y=0, speed=1.6)
-    plat.add(4600, GROUND_Y, 300, ground_h, is_ground=True)
-
-    level.add_checkpoint(4650, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-
-    level.obstacles.add_spike(4020, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(4680, GROUND_Y - 16, width=48)
-
-    for cx in (3350, 3570, 3790, 4020, 4060, 4370, 4400, 4650, 4700, 4750):
-        level.coins.add(cx, GROUND_Y - 90)
-
-    level.enemies.append(BasicEnemy(3030, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(4010, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(4360, GROUND_Y - 100 - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(4630, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(3650, GROUND_Y - 190, patrol_range=150))
-
-    level.add_story_trigger(4900, "O castelo de Vharok se ergue no horizonte. O fim da jornada se aproxima.")
-
-    # ---------- Região 4: Entrada do castelo (4900 - 6400) ----------
-    # Mantém o trecho original como primeira visão do castelo, mas o portão
-    # final só é alcançado depois das novas regiões.
-    plat.add(4900, GROUND_Y, 1500, ground_h, is_ground=True)
-    for cx in (5000, 5040, 5080, 6100, 6140, 6180):
-        level.coins.add(cx, GROUND_Y - 40)
-    level.enemies.append(BasicEnemy(5200, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(5800, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(5600, GROUND_Y - 160, patrol_range=170))
-    level.add_checkpoint(6200, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-
-    # ---------- Região 5: Desfiladeiro (6400 - 8000) ----------
-    # Saltos sobre vãos curtos, com plataformas elevadas como rotas seguras.
-    plat.add(6400, GROUND_Y, 340, ground_h, is_ground=True)
-    plat.add(6860, GROUND_Y, 440, ground_h, is_ground=True)
-    plat.add(7040, GROUND_Y - 100, 120, 22)
-    plat.add(7220, GROUND_Y - 170, 120, 22)
-    plat.add(7440, GROUND_Y, 560, ground_h, is_ground=True)
-    plat.add(7600, GROUND_Y - 90, 130, 22)
-    level.obstacles.add_spike(6960, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(7740, GROUND_Y - 16, width=64)
-    for cx, cy in ((6460, GROUND_Y - 40), (6500, GROUND_Y - 40),
-                   (7060, GROUND_Y - 145), (7240, GROUND_Y - 215),
-                   (7500, GROUND_Y - 40), (7540, GROUND_Y - 40),
-                   (7620, GROUND_Y - 135), (7820, GROUND_Y - 40)):
-        level.coins.add(cx, cy)
-    level.enemies.append(BasicEnemy(6900, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(7510, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(7200, GROUND_Y - 210, patrol_range=130))
-    level.add_checkpoint(7900, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-    level.add_story_trigger(6500, "O caminho antigo termina num desfiladeiro. Encontre uma passagem segura.")
-
-    # Perigos de teto exclusivos da caverna (x >= 7000). As camadas
-    # parallax_cave já fornecem decoração rochosa; estas instâncias usam
-    # o comportamento de aviso/queda existente em ObstacleGroup.
-    for sx, sy, sw, sh in (
-        (7130, GROUND_Y - 500, 30, 42),
-        (7480, GROUND_Y - 470, 34, 46),
-        (8030, GROUND_Y - 490, 30, 42),
-        (8580, GROUND_Y - 470, 34, 46),
-        (9060, GROUND_Y - 500, 30, 42),
-        (9740, GROUND_Y - 485, 34, 46),
-        # 10380 removida: evita interferir com a estalactite especial do puzzle.
-        (11020, GROUND_Y - 470, 34, 46),
-        (11880, GROUND_Y - 490, 30, 42),
-        (12500, GROUND_Y - 480, 34, 46),
-    ):
-        level.obstacles.add_stalactite(sx, sy, width=sw, height=sh, trigger_range=44)
-
-    # Outras estalactites do teto: todas são armadilhas e caem quando o
-    # jogador passa por baixo. A função add_ceiling_spike mantém compatibilidade
-    # com a nomenclatura antiga, mas agora cria uma estalactite dinâmica.
-    for sx, sy, sw, sh in (
-        (7280, GROUND_Y - 500, 48, 78),
-        (7800, GROUND_Y - 485, 48, 78),
-        (8320, GROUND_Y - 500, 48, 78),
-        (8900, GROUND_Y - 490, 48, 78),
-        (9500, GROUND_Y - 500, 48, 78),
-        # 10150 removida: deixa livre a área da estalactite especial.
-        (10750, GROUND_Y - 500, 48, 78),
-        (11450, GROUND_Y - 485, 48, 78),
-        (12150, GROUND_Y - 500, 48, 78),
-    ):
-        level.obstacles.add_ceiling_spike(sx, sy, width=sw, height=sh)
-
-    # ---------- Região 6: Caminho das cinzas (8000 - 9600) ----------
-    # Trecho da caverna simplificado: removidas as duas paredes e a
-    # plataforma elevada que só servia à rota vertical antiga.
-    # O vão de 140 px entre o chão e a próxima área pode ser atravessado
-    # com o pulo normal ou dash; a plataforma quebradiça oferece apoio opcional.
-    plat.add(8000, GROUND_Y, 320, ground_h, is_ground=True)
-    plat.add(8460, GROUND_Y, 340, ground_h, is_ground=True)
-    plat.add_crumbling(8350, GROUND_Y - 70, 90, 22)
-    plat.add(8580, GROUND_Y - 110, 120, 22)
-    plat.add_crumbling(8750, GROUND_Y - 70, 100, 22)
-    plat.add(8800, GROUND_Y, 450, ground_h, is_ground=True)
-    plat.add_moving(9220, GROUND_Y - 45, 100, 20, offset_x=0, offset_y=-75, speed=1.35)
-    plat.add(9380, GROUND_Y, 220, ground_h, is_ground=True)
-    level.obstacles.add_spike(8500, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(8910, GROUND_Y - 16, width=80)
-    for cx, cy in ((8050, GROUND_Y - 40), (8090, GROUND_Y - 40),
-                   (8370, GROUND_Y - 110), (8610, GROUND_Y - 150),
-                   (8780, GROUND_Y - 110), (8840, GROUND_Y - 40),
-                   (8880, GROUND_Y - 40), (9270, GROUND_Y - 90),
-                   (9410, GROUND_Y - 40), (9450, GROUND_Y - 40)):
-        level.coins.add(cx, cy)
-    level.enemies.append(BasicEnemy(8500, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(8970, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(9400, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(8720, GROUND_Y - 190, patrol_range=140))
-    level.add_checkpoint(9500, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-    level.add_story_trigger(8100, "A fumaça cobre a estrada. As defesas do castelo estão cada vez mais próximas.")
-
-    # ---------- Região 7: Muralha exterior (9600 - 11200) ----------
-    plat.add(9600, GROUND_Y, 400, ground_h, is_ground=True)
-    # Puzzle obrigatório da fenda (10000-10500): o salto é largo demais para
-    # atravessar diretamente. Kael precisa cair e morrer no vazio; essa morte
-    # aciona uma enorme estalactite no teto, que cai até o fundo da fenda.
-    # Depois do respawn no checkpoint de 9500, a pedra fica como plataforma
-    # permanente para realizar o parkour até o outro lado.
-    # Plataformas auxiliares removidas: a travessia deve depender da estalactite-puzzle.
-    plat.add(10500, GROUND_Y, 700, ground_h, is_ground=True)
-    level.add_story_trigger(
-        9850,
-        "A fenda e larga demais para um salto comum. O teto rachado parece instavel...",
-    )
-    # A estalactite-puzzle foi reduzida para não dominar a tela.
-    # Continua larga o suficiente para servir como plataforma de parkour.
-    # Mantemos o centro alinhado ao meio da fenda (x=10250).
-    level.obstacles.add_stalactite(
-        10100, GROUND_Y - 500, width=300, height=245,
-        trigger_range=0, variant=3, visual_size=(300, 245),
-        fall_to_y=690, trigger_on_death_zone=(10000, 10500),
-        persistent_after_landing=True,
-    )
-    plat.add(10720, GROUND_Y - 120, 130, 22)
-    plat.add(10910, GROUND_Y - 190, 120, 22)
-    level.obstacles.add_spike(9710, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(10640, GROUND_Y - 16, width=80)
-    for cx, cy in ((9650, GROUND_Y - 40), (9690, GROUND_Y - 40),
-                   (10040, GROUND_Y - 140), (10180, GROUND_Y - 40),
-                   (10220, GROUND_Y - 40), (10530, GROUND_Y - 40),
-                   (10750, GROUND_Y - 160), (10940, GROUND_Y - 230),
-                   (11000, GROUND_Y - 40), (11040, GROUND_Y - 40)):
-        level.coins.add(cx, cy)
-    level.enemies.append(BasicEnemy(10200, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(10570, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(10800, GROUND_Y - 220, patrol_range=150))
-    level.add_checkpoint(11100, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-    level.add_story_trigger(9700, "A muralha exterior está em ruínas, mas os guardas ainda protegem o acesso.")
-
-    # ---------- Região 8: Portões do castelo (11200 - 12800) ----------
-    plat.add(11200, GROUND_Y, 300, ground_h, is_ground=True)
-    plat.add(11620, GROUND_Y, 480, ground_h, is_ground=True)
-    plat.add(11780, GROUND_Y - 90, 120, 22)
-    plat.add(11960, GROUND_Y - 155, 120, 22)
-    plat.add(12220, GROUND_Y, 580, ground_h, is_ground=True)
-    plat.add(12380, GROUND_Y - 95, 140, 22)
-    level.obstacles.add_spike(11690, GROUND_Y - 16, width=64)
-    level.obstacles.add_spike(12470, GROUND_Y - 16, width=64)
-    for cx, cy in ((11250, GROUND_Y - 40), (11290, GROUND_Y - 40),
-                   (11790, GROUND_Y - 130), (11980, GROUND_Y - 195),
-                   (12040, GROUND_Y - 40), (12080, GROUND_Y - 40),
-                   (12260, GROUND_Y - 40), (12300, GROUND_Y - 40),
-                   (12400, GROUND_Y - 140), (12550, GROUND_Y - 40),
-                   (12590, GROUND_Y - 40), (12630, GROUND_Y - 40)):
-        level.coins.add(cx, cy)
-    level.enemies.append(BasicEnemy(11700, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(BasicEnemy(12120, GROUND_Y - settings.BASIC_ENEMY_HEIGHT))
-    level.enemies.append(RangedEnemy(12400, GROUND_Y - settings.RANGED_ENEMY_HEIGHT))
-    level.enemies.append(FlyingEnemy(11900, GROUND_Y - 210, patrol_range=160))
-    level.add_checkpoint(12580, GROUND_Y - settings.CHECKPOINT_HEIGHT)
-    level.add_story_trigger(12400, "As portas do castelo se abrem. Vharok o espera la dentro.")
-    level.boss_trigger = pygame.Rect(12700, GROUND_Y - 200, 40, 200)
-
-    # Background panorâmico em três trechos: deserto (0-6000), transição
-    # (6000-7000) e caverna (7000-12800). Mantém fallback se faltarem assets.
+    # Background em camadas de parallax: floresta (0 - FOREST_END) e caverna
+    # (FOREST_END - fim), com crossfade de 1000 px centrado no limite.
+    # Mantém fallback se faltarem assets.
     if SegmentedWorldBackdrop.available():
-        level.backdrop = SegmentedWorldBackdrop(level_width)
+        level.backdrop = SegmentedWorldBackdrop(
+            JOURNEY_WIDTH, transition=(FOREST_END - 500, FOREST_END + 500))
     elif MundoBackdrop.available():
-        level.backdrop = MundoBackdrop(level_width)
+        level.backdrop = MundoBackdrop(JOURNEY_WIDTH)
     else:
-        level.backdrop = VillageBackdrop(level_width, GROUND_Y)
-
+        level.backdrop = VillageBackdrop(JOURNEY_WIDTH, GROUND_Y)
 
     return level
 
