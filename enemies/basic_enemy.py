@@ -466,6 +466,9 @@ class RangedEnemy(Enemy):
         self.projectiles.append({
             "rect": proj, "pos": [cx, cy], "vel": (vx, vy),
             "dir": 1 if vx >= 0 else -1, "anim": 0,
+            # Relógio real: o projétil expira mesmo se o jogo parar
+            # de atualizar os inimigos após a morte do jogador.
+            "created_at": pygame.time.get_ticks(),
         })
 
     def _update_projectiles(self, level, player):
@@ -473,7 +476,11 @@ class RangedEnemy(Enemy):
         # Movimento em passos de no máximo metade da hitbox: o projétil não
         # "pula" por cima de um sólido fino entre dois frames.
         max_step = max(1, settings.PROJECTILE_SIZE // 2)
+        now = pygame.time.get_ticks()
         for p in self.projectiles:
+            # Remove a magia após 6 segundos, independentemente da distância.
+            if now - p.get("created_at", now) >= settings.RANGED_PROJECTILE_LIFETIME_MS:
+                continue
             vx, vy = p["vel"]
             steps = max(1, math.ceil(math.hypot(vx, vy) / max_step))
             p["anim"] = p.get("anim", 0) + 1
@@ -524,7 +531,12 @@ class RangedEnemy(Enemy):
         else:
             super().draw(surface, camera_x)
 
+        now = pygame.time.get_ticks()
         for p in self.projectiles:
+            # Evita que a magia continue visível na tela de morte/game over,
+            # mesmo que o update do inimigo esteja pausado.
+            if now - p.get("created_at", now) >= settings.RANGED_PROJECTILE_LIFETIME_MS:
+                continue
             r = p["rect"].move(-camera_x, 0)
             if projectile_image is not None:
                 visual_size = settings.RANGED_ENEMY_PROJECTILE_VISUAL_SIZE

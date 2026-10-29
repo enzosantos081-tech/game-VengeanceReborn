@@ -96,12 +96,20 @@ CHECKPOINT_SHOP_RANGE_PADDING_Y = 40
 # ---------- Morcego Sombrio (novo mob voador) ----------
 FLYING_ENEMY_WIDTH = 30
 FLYING_ENEMY_HEIGHT = 22
-FLYING_ENEMY_HEALTH = 2
-FLYING_ENEMY_DAMAGE = 8
+FLYING_ENEMY_HEALTH = 4
+FLYING_ENEMY_DAMAGE = 20
 FLYING_ENEMY_SPEED = 2.4
 FLYING_ENEMY_PATROL_RANGE = 140   # quanto se afasta do ponto de origem, pra cada lado
 FLYING_ENEMY_BOB_AMPLITUDE = 40   # altura do zigue-zague vertical
 FLYING_ENEMY_BOB_SPEED = 0.05
+# Investida do morcego: alcance de detecção, preparação, velocidade e duração (frames a 60 FPS).
+FLYING_ENEMY_DETECT_RANGE_X = 180
+FLYING_ENEMY_DETECT_RANGE_Y = 100
+FLYING_ENEMY_CHARGE_SPEED = 8.5
+FLYING_ENEMY_CHARGE_WINDUP_FRAMES = 10
+FLYING_ENEMY_CHARGE_FRAMES = 20
+FLYING_ENEMY_CHARGE_RECOVERY_FRAMES = 35
+FLYING_ENEMY_CHARGE_COOLDOWN_FRAMES = 100
 COLOR_FLYING_ENEMY = (70, 60, 90)
 ENEMY_COIN_DROP_FLYING = 10
 # Visual (spritesheet em assets/morcego/). A hitbox acima é independente do tamanho do sprite.
@@ -124,8 +132,8 @@ SECRET_COIN_VALUE = 5
 BASIC_ENEMY_WIDTH = 32
 BASIC_ENEMY_HEIGHT = 32
 BASIC_ENEMY_SPEED = 1.6
-BASIC_ENEMY_HEALTH = 2
-BASIC_ENEMY_DAMAGE = 10
+BASIC_ENEMY_HEALTH = 5
+BASIC_ENEMY_DAMAGE = 25
 BASIC_ENEMY_PATROL_RANGE = 90
 BASIC_ENEMY_SPRITE_HEIGHT = 62       # altura visual; hitbox continua 32x32
 BASIC_ENEMY_WALK_FRAME_TICKS = 7     # frames de jogo por quadro da caminhada
@@ -146,8 +154,8 @@ BASIC_ENEMY_ATTACK_ADVANCE_STOP_GAP = 10       # para de avançar a esta distân
 
 RANGED_ENEMY_WIDTH = 30
 RANGED_ENEMY_HEIGHT = 34
-RANGED_ENEMY_HEALTH = 2
-RANGED_ENEMY_DAMAGE = 10
+RANGED_ENEMY_HEALTH = 4
+RANGED_ENEMY_DAMAGE = 22
 RANGED_ENEMY_RANGE = 320
 RANGED_ENEMY_COOLDOWN = 90
 RANGED_ENEMY_SPRITE_HEIGHT = 54       # altura visual; hitbox física permanece 30x34
@@ -158,12 +166,13 @@ RANGED_ENEMY_PROJECTILE_VISUAL_SIZE = 22  # visual maior; hitbox continua 8x8
 RANGED_ENEMY_AIM_MIN_DISTANCE = 4     # se Kael estiver quase no ponto de origem, atira na horizontal em vez de normalizar um vetor ~zero
 PROJECTILE_SPEED = 6          # velocidade total (px/frame), igual em qualquer ângulo de disparo
 PROJECTILE_SIZE = 8
+RANGED_PROJECTILE_LIFETIME_MS = 3000  # magia do ranged desaparece após 6 segundos
 
 # ---------- Boss ----------
 BOSS_WIDTH = 90
 BOSS_HEIGHT = 110
-BOSS_MAX_HEALTH = 30
-BOSS_DAMAGE = 18
+BOSS_MAX_HEALTH = 50
+BOSS_DAMAGE = 25
 BOSS_SPEED = 2.2
 BOSS_ATTACK_COOLDOWN = 75
 BOSS_SLAM_TELEGRAPH = 40

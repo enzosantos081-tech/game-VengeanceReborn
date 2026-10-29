@@ -1,16 +1,20 @@
 """
 systems/audio.py
-Responsável pelos efeitos sonoros. Como o projeto não recebeu nenhum
-arquivo de áudio pronto (seção 23 do documento reserva assets/sounds/
-para isso), os sons são gerados PROCEDURALMENTE com numpy: ondas simples
-(seno/quadrada/ruído) com um envelope curto de ataque/decaimento, o
-suficiente para dar feedback de pulo, ataque, dano, moeda, etc. Se o
-mixer de áudio não estiver disponível no ambiente (ex.: sem placa de
-som), o jogo continua funcionando normalmente e apenas fica mudo.
+Responsável pelo áudio do jogo:
+  - SoundManager: efeitos sonoros. Como o projeto não tem arquivos de áudio
+    de efeitos, TODOS os sons são sintetizados em tempo de execução com
+    numpy (veja systems/sfx_synth.py, onde estão as "receitas" de cada som).
+    A geração roda numa thread em segundo plano ao abrir o jogo (~4 s): o
+    menu aparece na hora e cada som fica disponível assim que é gerado.
+    Suporta volume e posição estéreo (pan), usados para sons de inimigos.
+  - MusicManager: música de fundo em loop (assets/sounds/).
+Se o mixer ou o numpy não estiverem disponíveis, o jogo continua normalmente,
+apenas sem som.
 """
 
-import math
 import os
+import random
+import threading
 import pygame
 
 from config import settings
@@ -23,88 +27,91 @@ except ImportError:
     _NUMPY_AVAILABLE = False
 
 
-def _envelope(n, attack=0.05, decay=0.6):
-    """Curva simples de volume: sobe rápido, desce em decaimento exponencial."""
-    t = np.linspace(0, 1, n)
-    attack_n = max(1, int(n * attack))
-    env = np.ones(n)
-    env[:attack_n] = np.linspace(0, 1, attack_n)
-    env *= np.exp(-t * (1.0 / max(decay, 0.05)) * 3)
-    return env
-
-
-def _tone(freq, duration, wave="sine", volume=1.0, sweep_to=None, noise_amount=0.0):
-    sr = settings.AUDIO_SAMPLE_RATE
-    n = max(1, int(sr * duration))
-    t = np.linspace(0, duration, n, endpoint=False)
-
-    if sweep_to is not None:
-        freqs = np.linspace(freq, sweep_to, n)
-        phase = 2 * np.pi * np.cumsum(freqs) / sr
-    else:
-        phase = 2 * np.pi * freq * t
-
-    if wave == "square":
-        wav = np.sign(np.sin(phase))
-    elif wave == "triangle":
-        wav = 2 * np.abs(2 * ((phase / (2 * np.pi)) % 1) - 1) - 1
-    else:
-        wav = np.sin(phase)
-
-    if noise_amount > 0:
-        noise = np.random.uniform(-1, 1, n)
-        wav = wav * (1 - noise_amount) + noise * noise_amount
-
-    wav *= _envelope(n)
-    wav *= volume * settings.MASTER_VOLUME
-    wav = np.clip(wav, -1, 1)
-    pcm = (wav * 32767).astype(np.int16)
-    stereo = np.repeat(pcm.reshape(-1, 1), 2, axis=1)
-    return np.ascontiguousarray(stereo)
-
-
 class SoundManager:
+    SFX_CHANNELS = 24   # sons simultâneos (o padrão do pygame são só 8)
+
+    # Nomes antigos continuam funcionando (compatibilidade com o resto do código).
+    ALIASES = {"attack": "attack_base", "coin": "coin_0"}
+
     def __init__(self):
         self.enabled = False
-        self.sounds = {}
+        self.sounds = {}      # nome -> [pygame.mixer.Sound, ...] (variações)
+        self._arrays = {}     # nome -> [array int16, ...] entregues pela thread
+        self._last = {}       # última variação tocada de cada som (evita repetir igual)
+        self._thread = None
         if not _NUMPY_AVAILABLE:
             # numpy não está instalado: o jogo continua funcionando
             # normalmente, apenas sem efeitos sonoros.
             return
         try:
-            pygame.mixer.init(frequency=settings.AUDIO_SAMPLE_RATE, size=-16, channels=2)
-            self._build_sounds()
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=settings.AUDIO_SAMPLE_RATE, size=-16, channels=2)
+            pygame.mixer.set_num_channels(self.SFX_CHANNELS)
             self.enabled = True
         except (pygame.error, Exception):
             self.enabled = False
-
-    def _build_sounds(self):
-        specs = {
-            "jump": _tone(420, 0.12, wave="triangle", volume=0.6, sweep_to=680),
-            "attack": _tone(200, 0.08, wave="square", volume=0.5, sweep_to=90),
-            "hit": _tone(140, 0.09, wave="square", volume=0.6, noise_amount=0.3),
-            "coin": _tone(900, 0.10, wave="sine", volume=0.5, sweep_to=1400),
-            "damage": _tone(160, 0.18, wave="square", volume=0.7, sweep_to=60, noise_amount=0.2),
-            "checkpoint": _tone(500, 0.22, wave="sine", volume=0.55, sweep_to=900),
-            "death": _tone(300, 0.5, wave="triangle", volume=0.7, sweep_to=40),
-            "boss_slam": _tone(90, 0.28, wave="square", volume=0.8, noise_amount=0.4),
-            "boss_barrage": _tone(600, 0.15, wave="square", volume=0.45, sweep_to=1100, noise_amount=0.2),
-            "victory": _tone(523, 0.5, wave="sine", volume=0.6, sweep_to=1046),
-            "menu_move": _tone(300, 0.05, wave="square", volume=0.3),
-            "menu_select": _tone(500, 0.09, wave="sine", volume=0.45, sweep_to=750),
-            "purchase": _tone(700, 0.14, wave="sine", volume=0.5, sweep_to=1050),
-            "denied": _tone(150, 0.10, wave="square", volume=0.4),
-            "dash": _tone(250, 0.10, wave="triangle", volume=0.5, sweep_to=520),
-        }
-        for name, array in specs.items():
-            self.sounds[name] = pygame.sndarray.make_sound(array)
-
-    def play(self, name):
-        if not self.enabled:
             return
-        sound = self.sounds.get(name)
-        if sound:
-            sound.play()
+        self._thread = threading.Thread(target=self._build_in_background, daemon=True)
+        self._thread.start()
+
+    # ---------- Geração ----------
+    def _build_in_background(self):
+        try:
+            from systems import sfx_synth
+            sfx_synth.build_all(on_ready=self._store)
+        except Exception:
+            pass   # sem som é melhor do que travar o jogo
+
+    def _store(self, name, arrays):
+        self._arrays[name] = arrays
+
+    def ready(self):
+        """True quando todos os sons já foram gerados."""
+        return self._thread is None or not self._thread.is_alive()
+
+    def _variants(self, name):
+        name = self.ALIASES.get(name, name)
+        variants = self.sounds.get(name)
+        if variants is None:
+            arrays = self._arrays.get(name)
+            if arrays is None:
+                return name, None   # ainda gerando (ou som inexistente)
+            variants = []
+            try:
+                for arr in arrays:
+                    snd = pygame.sndarray.make_sound(arr)   # conversão feita na thread principal
+                    snd.set_volume(settings.MASTER_VOLUME)
+                    variants.append(snd)
+            except Exception:
+                variants = []   # formato de áudio incompatível: este som fica mudo
+            self.sounds[name] = variants
+        return name, variants
+
+    # ---------- Reprodução ----------
+    def play(self, name, volume=1.0, pan=0.0):
+        """Toca um som. volume: 0 a 1 (multiplica o volume do som).
+        pan: -1 (só esquerda) a +1 (só direita). Retorna o canal (ou None)."""
+        if not self.enabled or volume <= 0.01:
+            return None
+        key, variants = self._variants(name)
+        if not variants:
+            return None
+        idx = 0
+        if len(variants) > 1:
+            choices = [i for i in range(len(variants)) if i != self._last.get(key)]
+            idx = random.choice(choices)
+            self._last[key] = idx
+        channel = variants[idx].play()
+        if channel is not None and (volume != 1.0 or pan != 0.0):
+            left = volume * (1.0 - max(0.0, pan))
+            right = volume * (1.0 - max(0.0, -pan))
+            channel.set_volume(min(1.0, left), min(1.0, right))
+        return channel
+
+    def stop_all(self):
+        """Silencia todos os efeitos que ainda estão tocando."""
+        if self.enabled:
+            pygame.mixer.stop()
 
 
 def _trim_for_loop(sound):

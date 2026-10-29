@@ -95,6 +95,9 @@ class Level:
             player.rect.y += player.standing_platform.delta_y
 
         solids = self.platforms.rects()
+        # Uma estalactite só vira plataforma depois de pousar. Isso permite
+        # usar a grande formação como ponte/parkour após o puzzle da fenda.
+        solids.extend(self.obstacles.landed_platform_rects())
         new_rect, on_ground = collision.move_and_collide(player.rect, vel_x, vel_y, solids)
         player.rect = new_rect
         player.on_ground = on_ground
@@ -146,7 +149,7 @@ class Level:
         for enemy in self.enemies:
             enemy.update(self, player)
         self.enemies = [e for e in self.enemies if True]  # mantidos p/ desenhar corpo caído; sem despawn
-        self.obstacles.update(player, ground_y=GROUND_Y)
+        self.obstacles.update(player, ground_y=GROUND_Y, solids=self.platforms.rects())
         coins_collected = self.coins.update(player, particles)
         if self.boss:
             self.boss.update(self, player)
@@ -363,12 +366,28 @@ def build_main_level():
         (8580, GROUND_Y - 470, 34, 46),
         (9060, GROUND_Y - 500, 30, 42),
         (9740, GROUND_Y - 485, 34, 46),
-        (10380, GROUND_Y - 495, 30, 42),
+        # 10380 removida: evita interferir com a estalactite especial do puzzle.
         (11020, GROUND_Y - 470, 34, 46),
         (11880, GROUND_Y - 490, 30, 42),
         (12500, GROUND_Y - 480, 34, 46),
     ):
         level.obstacles.add_stalactite(sx, sy, width=sw, height=sh, trigger_range=44)
+
+    # Outras estalactites do teto: todas são armadilhas e caem quando o
+    # jogador passa por baixo. A função add_ceiling_spike mantém compatibilidade
+    # com a nomenclatura antiga, mas agora cria uma estalactite dinâmica.
+    for sx, sy, sw, sh in (
+        (7280, GROUND_Y - 500, 48, 78),
+        (7800, GROUND_Y - 485, 48, 78),
+        (8320, GROUND_Y - 500, 48, 78),
+        (8900, GROUND_Y - 490, 48, 78),
+        (9500, GROUND_Y - 500, 48, 78),
+        # 10150 removida: deixa livre a área da estalactite especial.
+        (10750, GROUND_Y - 500, 48, 78),
+        (11450, GROUND_Y - 485, 48, 78),
+        (12150, GROUND_Y - 500, 48, 78),
+    ):
+        level.obstacles.add_ceiling_spike(sx, sy, width=sw, height=sh)
 
     # ---------- Região 6: Caminho das cinzas (8000 - 9600) ----------
     # Trecho da caverna simplificado: removidas as duas paredes e a
@@ -400,10 +419,26 @@ def build_main_level():
 
     # ---------- Região 7: Muralha exterior (9600 - 11200) ----------
     plat.add(9600, GROUND_Y, 400, ground_h, is_ground=True)
-    plat.add(10140, GROUND_Y, 360, ground_h, is_ground=True)
-    plat.add(10020, GROUND_Y - 100, 100, 22)
-    plat.add_moving(10480, GROUND_Y - 80, 110, 20, offset_x=100, offset_y=-35, speed=1.5)
+    # Puzzle obrigatório da fenda (10000-10500): o salto é largo demais para
+    # atravessar diretamente. Kael precisa cair e morrer no vazio; essa morte
+    # aciona uma enorme estalactite no teto, que cai até o fundo da fenda.
+    # Depois do respawn no checkpoint de 9500, a pedra fica como plataforma
+    # permanente para realizar o parkour até o outro lado.
+    # Plataformas auxiliares removidas: a travessia deve depender da estalactite-puzzle.
     plat.add(10500, GROUND_Y, 700, ground_h, is_ground=True)
+    level.add_story_trigger(
+        9850,
+        "A fenda e larga demais para um salto comum. O teto rachado parece instavel...",
+    )
+    # A estalactite-puzzle foi reduzida para não dominar a tela.
+    # Continua larga o suficiente para servir como plataforma de parkour.
+    # Mantemos o centro alinhado ao meio da fenda (x=10250).
+    level.obstacles.add_stalactite(
+        10100, GROUND_Y - 500, width=300, height=245,
+        trigger_range=0, variant=3, visual_size=(300, 245),
+        fall_to_y=690, trigger_on_death_zone=(10000, 10500),
+        persistent_after_landing=True,
+    )
     plat.add(10720, GROUND_Y - 120, 130, 22)
     plat.add(10910, GROUND_Y - 190, 120, 22)
     level.obstacles.add_spike(9710, GROUND_Y - 16, width=64)

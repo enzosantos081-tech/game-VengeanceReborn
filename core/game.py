@@ -25,6 +25,7 @@ from systems.respawn import RespawnSystem
 from systems.shop import Shop
 from systems.particles import ParticleSystem
 from systems.audio import SoundManager, MusicManager
+from systems.audio_events import AudioDirector
 
 from screens.menu import MenuScreen
 from screens.hud import HUD
@@ -49,6 +50,7 @@ class Game:
         self.input = InputManager()
         self.audio = SoundManager()
         self.music = MusicManager()
+        self.sfx = AudioDirector(self.audio)   # detecta eventos do jogo e toca os sons (systems/audio_events.py)
 
         self.menu_screen = MenuScreen()
         self.hud = HUD()
@@ -66,6 +68,7 @@ class Game:
         self._prev_on_ground = False
         self._prev_health = None
         self._victory_sound_played = False
+        self._victory_timer = 0
 
         self.shake_timer = 0
         self.shake_magnitude = 0.0
@@ -112,6 +115,8 @@ class Game:
         self._prev_on_ground = False
         self._prev_health = self.player.health
         self._victory_sound_played = False
+        self._victory_timer = 0
+        self.sfx.reset()
         self.shake_timer = 0
         self.shake_magnitude = 0.0
         self.music.play("level")
@@ -127,6 +132,7 @@ class Game:
         self.camera_x = 0
         self.particles = ParticleSystem()
         self._prev_on_ground = False
+        self.audio.play("boss_enter")
         self.music.play("boss")
 
     def restart_attempt(self):
@@ -134,6 +140,7 @@ class Game:
         checkpoint imediatamente, sem passar pela tela de derrota."""
         self.respawn_system.respawn(self.player)
         self._prev_health = self.player.health
+        self.audio.play("respawn")
         self.states.change(settings.STATE_PLAYING)
 
     def return_to_menu(self):
@@ -178,7 +185,7 @@ class Game:
         if state == settings.STATE_MENU:
             self.menu_screen.update()
             if self.input.confirm_pressed():
-                self.audio.play("menu_select")
+                self.audio.play("game_start")
                 self.start_new_game()
 
         elif state == settings.STATE_PLAYING:
@@ -192,26 +199,41 @@ class Game:
 
         elif state == settings.STATE_GAME_OVER:
             self.game_over_screen.update()
+            # Mantém a estalactite especial do puzzle atualizando durante a tela
+            # de morte. Sem isso, a simulação pausa antes de a pedra terminar a queda.
+            if self.level is not None:
+                self.level.obstacles.update(
+                    self.player,
+                    ground_y=settings.SCREEN_HEIGHT - 64,
+                    solids=self.level.platforms.rects(),
+                )
             if self.game_over_screen.ready_to_continue() and self.input.confirm_pressed():
                 self.respawn_system.respawn(self.player)
                 self._prev_health = self.player.health
+                self.audio.play("respawn")
                 self.states.change(settings.STATE_PLAYING)
 
         elif state == settings.STATE_VICTORY:
             if not self._victory_sound_played:
-                self.audio.play("victory")
-                self._victory_sound_played = True
+                # A queda de Vharok (boss_death) toca primeiro; a fanfarra entra ~2,5 s depois.
+                self._victory_timer += 1
+                if self._victory_timer >= 150:
+                    self.audio.play("victory")
+                    self._victory_sound_played = True
             if self.input.confirm_pressed():
                 save.delete_save()
+                self.audio.stop_all()
                 self.return_to_menu()
 
     def _update_playing(self):
         if self.input.pause_pressed():
             self.pause_menu.reset_selection()
+            self.audio.play("pause_open")
             self.states.change(settings.STATE_PAUSED)
             return
 
         self._prev_health = self.player.health
+        self.sfx.begin_frame(self.player)
         self.player.handle_input(self.input, self.camera_x)
         # Plataformas móveis avançam antes do jogador, para que o "colamento"
         # em cima delas (world/level.py -> move_and_collide) use o
@@ -219,12 +241,8 @@ class Game:
         self.level.update_platforms()
         self.player.update(self.level, self.frame_dt_ms)
 
-        if self.player.just_jumped:
-            self.audio.play("jump")
-        if self.player.just_attacked:
-            self.audio.play("attack")
-        if self.player.just_dashed:
-            self.audio.play("dash")
+        # Sons de pulo / pulo duplo / ataque (por espada) / dash / pouso / coração:
+        # tocados pelo AudioDirector (self.sfx.update, mais abaixo).
         if self.player.dashing:
             self.particles.emit_dash_trail(self.player.rect.centerx, self.player.rect.centery)
 
@@ -233,23 +251,35 @@ class Game:
             self.particles.emit_dust(self.player.rect.centerx, self.player.rect.bottom)
         self._prev_on_ground = self.player.on_ground
 
-        # Dano sofrido nesta rodada (comparando vida antes/depois do update)
+        coins_collected = self.level.update(self.player, self.particles)
+
+        # Dano sofrido nesta rodada (comparando vida antes/depois dos updates).
+        # CORREÇÃO: esta checagem ficava ANTES de self.level.update(), que é
+        # onde inimigos, espinhos, estalactites e projéteis causam o dano, então
+        # o som de dano (e o tremor de tela) nunca disparavam. Agora disparam.
         if self.player.alive and self.player.health < self._prev_health:
             self.audio.play("damage")
+            self.sfx.player_damaged(self.level, self.player)
             self.trigger_shake(4, 10)
 
-        coins_collected = self.level.update(self.player, self.particles)
         if coins_collected:
-            self.audio.play("coin")
+            self.sfx.coin()
 
         all_targets = self.level.living_enemies() + ([self.level.boss] if self.level.boss and self.level.boss.alive else [])
+        boss = self.level.boss
+        boss_hp_before = boss.health if boss else 0
         hit_ids, coins_awarded = resolve_player_attack(
             self.player, all_targets, self.particles,
         )
         if hit_ids:
-            self.audio.play("hit")
+            boss_hit = bool(boss) and boss.id in hit_ids
+            if len(hit_ids) > (1 if boss_hit else 0):
+                self.audio.play("hit")
+            if boss_hit:
+                # Com hiper-armadura (aviso do golpe) o boss não leva dano: soa aço contra aço.
+                self.audio.play("hit_boss" if boss.health < boss_hp_before else "boss_armor")
         if coins_awarded:
-            self.audio.play("coin")
+            self.sfx.coin()
 
         # Ataques do Boss (para som e screen shake)
         if self.level.boss and self.level.boss.attack_triggered_this_frame:
@@ -257,12 +287,13 @@ class Game:
                 self.audio.play("boss_slam")
                 self.trigger_shake(8, 16)
             elif self.level.boss.attack_triggered_this_frame == "melee":
-                self.audio.play("boss_slam")   # golpe curto: mesmo som do slam, tremor menor
+                self.audio.play("boss_melee")   # golpe curto: som próprio, tremor menor
                 self.trigger_shake(4, 8)
             else:
                 self.audio.play("boss_barrage")
                 self.trigger_shake(3, 8)
 
+        self.sfx.update(self.level, self.player)   # eventos de Kael, inimigos, boss e mundo
         self.particles.update()
         self.story.update()
 
@@ -277,13 +308,14 @@ class Game:
         story_text = self.level.check_story_triggers(self.player.rect.centerx, self.player.rect.centery)
         if story_text:
             self.story.show(story_text)
+            self.audio.play("story")
 
         # Loja: zona fixa da Região 1 OU qualquer checkpoint já ativado
         # (assim o jogador não precisa voltar à área inicial toda vez
         # que quiser gastar moedas em melhorias).
         if self._near_shop():
             if self.input.interact_pressed():
-                self.audio.play("menu_select")
+                self.audio.play("shop_open")
                 self.states.change(settings.STATE_SHOP)
 
         # Transição para a fase do Boss
@@ -305,7 +337,9 @@ class Game:
         if self.level.boss and not self.level.boss.alive:
             save.save_game(self.player.stats)
             self._victory_sound_played = False
+            self._victory_timer = 0
             self.music.stop()
+            self.audio.play("boss_death")
             self.states.change(settings.STATE_VICTORY)
             return
 
@@ -313,6 +347,7 @@ class Game:
 
     def _update_shop(self):
         if self.input.pause_pressed():
+            self.audio.play("shop_close")
             self.states.change(settings.STATE_PLAYING)
             return
 
@@ -332,25 +367,32 @@ class Game:
 
         # F aprimora a espada selecionada; ENTER/E compra ou equipa.
         if self.input.is_pressed(pygame.K_f):
+            before = self.sfx.shop_snapshot(self.player)
             success = self.shop.upgrade_selected(self.player)
-            self.audio.play("purchase" if success else "denied")
+            self.audio.play(self.sfx.shop_result(before, self.sfx.shop_snapshot(self.player), success))
             if success:
                 save.save_game(self.player.stats)
         elif self.input.interact_pressed() or self.input.confirm_pressed():
+            before = self.sfx.shop_snapshot(self.player)
             success = self.shop.purchase_selected(self.player)
-            self.audio.play("purchase" if success else "denied")
+            self.audio.play(self.sfx.shop_result(before, self.sfx.shop_snapshot(self.player), success))
             if success:
                 save.save_game(self.player.stats)
 
         if self.input.mouse_pressed(1):
+            before = self.sfx.shop_snapshot(self.player)
+            nav_before = (self.shop.tab_index, self.shop.selected_index)
             result = self.hud.handle_shop_click(pygame.mouse.get_pos(), self.player, self.shop)
             if result is not None:
-                self.audio.play("purchase" if result else "denied")
+                self.audio.play(self.sfx.shop_result(before, self.sfx.shop_snapshot(self.player), result))
                 if result:
                     save.save_game(self.player.stats)
+            elif (self.shop.tab_index, self.shop.selected_index) != nav_before:
+                self.audio.play("menu_move")   # clicou numa aba ou num item
 
     def _update_pause(self):
         if self.input.pause_pressed():
+            self.audio.play("pause_close")
             self.states.change(settings.STATE_PLAYING)
             return
         if self.input.down_pressed():
@@ -361,7 +403,7 @@ class Game:
             self.audio.play("menu_move")
         if self.input.confirm_pressed() or self.input.interact_pressed():
             option = self.pause_menu.selected_option()
-            self.audio.play("menu_select")
+            self.audio.play("pause_close" if option == "Continuar" else "menu_select")
             if option == "Continuar":
                 self.states.change(settings.STATE_PLAYING)
             elif option == "Reiniciar tentativa":

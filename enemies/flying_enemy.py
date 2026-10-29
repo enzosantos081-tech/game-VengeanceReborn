@@ -38,8 +38,18 @@ class FlyingEnemy(Enemy):
         self.facing_right = True
         self._t = 0.0
 
+        # Investida: o morcego detecta o jogador, prepara o ataque e avança
+        # rapidamente na direção da posição do jogador no início da investida.
+        self._charge_state = "patrol"  # patrol, windup, charge, recovery
+        self._charge_timer = 0
+        self._charge_vx = 0.0
+        self._charge_vy = 0.0
+        self._charge_cooldown = 0
+        self._charge_trigger_x = getattr(settings, "FLYING_ENEMY_DETECT_RANGE_X", 300)
+        self._charge_trigger_y = getattr(settings, "FLYING_ENEMY_DETECT_RANGE_Y", 190)
+
         # ---- Estado puramente visual (não afeta a lógica) ----
-        self.sprites = flying_enemy_sprites.get_flying_enemy_sprites()   # None -> desenho simples antigo
+        self.sprites = flying_enemy_sprites.get_flying_enemy_sprites()
         self._flap_tick = 0
         self._flap_ticks = max(1, int(getattr(settings, "FLYING_ENEMY_FLAP_TICKS", 8)))
 
@@ -49,15 +59,63 @@ class FlyingEnemy(Enemy):
             return
 
         self._flap_tick += 1
-        self._t += settings.FLYING_ENEMY_BOB_SPEED
-        self.rect.x += round(settings.FLYING_ENEMY_SPEED * self.direction)
-        if self.rect.x >= self.home_x + self.patrol_range:
-            self.direction = -1
-            self.facing_right = False
-        elif self.rect.x <= self.home_x - self.patrol_range:
-            self.direction = 1
-            self.facing_right = True
-        self.rect.y = round(self.home_y + math.sin(self._t) * self.bob_amplitude)
+        if self._charge_cooldown > 0:
+            self._charge_cooldown -= 1
+
+        if self._charge_state == "patrol":
+            self._t += settings.FLYING_ENEMY_BOB_SPEED
+            self.rect.x += round(settings.FLYING_ENEMY_SPEED * self.direction)
+            if self.rect.x >= self.home_x + self.patrol_range:
+                self.direction = -1
+                self.facing_right = False
+            elif self.rect.x <= self.home_x - self.patrol_range:
+                self.direction = 1
+                self.facing_right = True
+            self.rect.y = round(self.home_y + math.sin(self._t) * self.bob_amplitude)
+
+            # Só inicia a investida quando o jogador está próximo o bastante.
+            dx = player.rect.centerx - self.rect.centerx
+            dy = player.rect.centery - self.rect.centery
+            distance = math.hypot(dx, dy)
+            # Evita investidas desperdiçadas de longe: o jogador precisa estar
+            # dentro do alcance útil da investida e relativamente alinhado.
+            charge_reach = (float(getattr(settings, "FLYING_ENEMY_CHARGE_SPEED", 8.5))
+                            * int(getattr(settings, "FLYING_ENEMY_CHARGE_FRAMES", 20)))
+            if (player.alive and self._charge_cooldown <= 0
+                    and abs(dx) <= self._charge_trigger_x
+                    and abs(dy) <= self._charge_trigger_y
+                    and distance <= charge_reach * 0.88):
+                distance = max(1.0, distance)
+                speed = float(getattr(settings, "FLYING_ENEMY_CHARGE_SPEED", 8.5))
+                self._charge_vx = dx / distance * speed
+                self._charge_vy = dy / distance * speed
+                self.facing_right = dx >= 0
+                self._charge_state = "windup"
+                self._charge_timer = int(getattr(settings, "FLYING_ENEMY_CHARGE_WINDUP_FRAMES", 10))
+
+        elif self._charge_state == "windup":
+            # Pequena preparação para que o ataque seja perceptível e evitável.
+            self._charge_timer -= 1
+            if self._charge_timer <= 0:
+                self._charge_state = "charge"
+                self._charge_timer = int(getattr(settings, "FLYING_ENEMY_CHARGE_FRAMES", 20))
+
+        elif self._charge_state == "charge":
+            self.rect.x += round(self._charge_vx)
+            self.rect.y += round(self._charge_vy)
+            self._charge_timer -= 1
+            if self._charge_timer <= 0:
+                self._charge_state = "recovery"
+                self._charge_timer = int(getattr(settings, "FLYING_ENEMY_CHARGE_RECOVERY_FRAMES", 35))
+                self._charge_cooldown = int(getattr(settings, "FLYING_ENEMY_CHARGE_COOLDOWN_FRAMES", 100))
+
+        elif self._charge_state == "recovery":
+            self._charge_timer -= 1
+            if self._charge_timer <= 0:
+                self._charge_state = "patrol"
+                # Recomeça a patrulha a partir da posição atual, sem teletransportar.
+                self.direction = 1 if self.rect.centerx < self.home_x else -1
+                self.facing_right = self.direction > 0
 
         self.check_contact_damage(player)
 
@@ -68,6 +126,11 @@ class FlyingEnemy(Enemy):
         self.direction = 1
         self.facing_right = True
         self._t = 0.0
+        self._charge_state = "patrol"
+        self._charge_timer = 0
+        self._charge_vx = 0.0
+        self._charge_vy = 0.0
+        self._charge_cooldown = 0
 
     def draw(self, surface, camera_x):
         if not self.alive:
