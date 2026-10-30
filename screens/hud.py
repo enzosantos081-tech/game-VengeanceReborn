@@ -50,10 +50,66 @@ class HUD:
     # ------------------------------------------------------------------
     # HUD principal
     # ------------------------------------------------------------------
-    def draw(self, surface, player):
+    def draw(self, surface, player, level=None):
         self._draw_health_bar(surface, player)
         self._draw_coins(surface, player)
         self._draw_dash(surface, player)
+        if level is not None:
+            self._draw_minimap(surface, player, level)
+
+    # ------------------------------------------------------------------
+    # Minimapa (uma linha: início -> checkpoints, com o jogador)
+    # ------------------------------------------------------------------
+    MINIMAP_W = 400
+    MINIMAP_H = 46
+    MINIMAP_TOP = 14
+    MINIMAP_PAD = 30
+
+    def _draw_minimap(self, surface, player, level):
+        # A arena do Boss é uma tela só: não precisa de mapa.
+        if getattr(level, "is_boss_level", False) or level.width <= 0:
+            return
+
+        panel = pygame.Rect(0, self.MINIMAP_TOP, self.MINIMAP_W, self.MINIMAP_H)
+        panel.centerx = surface.get_width() // 2
+        draw_panel(surface, panel, alpha=160, radius=10)
+
+        x0 = panel.left + self.MINIMAP_PAD
+        x1 = panel.right - self.MINIMAP_PAD
+        line_y = panel.bottom - 14
+
+        def to_x(world_x):
+            ratio = max(0.0, min(1.0, world_x / level.width))
+            return int(x0 + (x1 - x0) * ratio)
+
+        player_x = to_x(player.rect.centerx)
+
+        # trilho: parte percorrida acesa, o resto apagado
+        pygame.draw.line(surface, (60, 68, 105), (x0, line_y), (x1, line_y), 4)
+        pygame.draw.line(surface, COL_EMBER, (x0, line_y), (player_x, line_y), 4)
+        pygame.draw.circle(surface, COL_MOON_DIM, (x0, line_y), 4)   # ponto de partida
+
+        # checkpoints (verde = ativado, cinza = ainda não)
+        for cp in level.checkpoints:
+            self._draw_minimap_flag(surface, to_x(cp.rect.centerx), line_y, cp.active)
+
+        # jogador por cima de tudo
+        self._draw_minimap_player(surface, player_x, line_y)
+
+    def _draw_minimap_flag(self, surface, x, line_y, active):
+        color = settings.COLOR_CHECKPOINT_ON if active else settings.COLOR_CHECKPOINT_OFF
+        pygame.draw.line(surface, (230, 230, 235), (x, line_y), (x, line_y - 15), 2)
+        pygame.draw.polygon(surface, color, [(x + 1, line_y - 15), (x + 10, line_y - 11), (x + 1, line_y - 7)])
+        pygame.draw.polygon(surface, (20, 20, 30), [(x + 1, line_y - 15), (x + 10, line_y - 11), (x + 1, line_y - 7)], 1)
+
+    def _draw_minimap_player(self, surface, x, line_y):
+        # alfinete dourado apontando para o trilho
+        tip = (x, line_y)
+        pygame.draw.polygon(surface, (20, 20, 30), [(x - 6, line_y - 9), (x + 6, line_y - 9), (x, line_y + 3)])
+        pygame.draw.polygon(surface, settings.COLOR_PLAYER, [(x - 5, line_y - 9), (x + 5, line_y - 9), (tip[0], line_y + 1)])
+        pygame.draw.circle(surface, (20, 20, 30), (x, line_y - 13), 7)
+        pygame.draw.circle(surface, settings.COLOR_PLAYER, (x, line_y - 13), 6)
+        pygame.draw.circle(surface, (255, 250, 220), (x, line_y - 13), 2)
 
     def _draw_health_bar(self, surface, player):
         x, y, w, h = 20, 18, 270, 28

@@ -189,6 +189,12 @@ def load_backdrop():
 # Tela inicial
 # ====================================================================
 class MenuScreen:
+    # Com uma partida salva, o menu mostra estas opções (as strings são
+    # usadas por core/game.py - se mudar o texto, mude lá também).
+    OPTIONS = ["Continuar", "Novo jogo"]
+    CONFIRM_OPTIONS = ["Cancelar", "Substituir"]
+    MESSAGE_FRAMES = 240
+
     # (teclas, descrição) - coluna da esquerda e da direita
     CONTROLS_LEFT = [
         (["A", "D"], "Mover (ou setas)"),
@@ -217,8 +223,53 @@ class MenuScreen:
         self.shade = vertical_gradient(w, h, (3, 5, 16, 120), (3, 5, 16, 170))
         self.vignette = make_vignette(w, h, strength=190)
 
+        # Partida salva (resumo vindo de core/run_state.summarize) e estado
+        # da seleção / confirmação de "Novo jogo".
+        self.saved = None
+        self.selected_index = 0
+        self.confirming_new = False
+        self.confirm_index = 0
+        self.message = ""
+        self.message_timer = 0
+
+    # ---------- Partida salva ----------
+    def set_saved_run(self, summary):
+        """summary: dict com region/coins/minutes, ou None se não há partida."""
+        self.saved = summary
+        self.selected_index = 0
+        self.confirming_new = False
+        self.confirm_index = 0
+
+    def has_saved_run(self):
+        return self.saved is not None
+
+    def move_selection(self, delta):
+        self.selected_index = (self.selected_index + delta) % len(MenuScreen.OPTIONS)
+
+    def selected_option(self):
+        return MenuScreen.OPTIONS[self.selected_index]
+
+    def begin_confirm_new(self):
+        self.confirming_new = True
+        self.confirm_index = 0          # começa em "Cancelar": nada é apagado sem querer
+
+    def cancel_confirm(self):
+        self.confirming_new = False
+
+    def toggle_confirm(self):
+        self.confirm_index = 1 - self.confirm_index
+
+    def confirm_is_replace(self):
+        return MenuScreen.CONFIRM_OPTIONS[self.confirm_index] == "Substituir"
+
+    def show_message(self, text):
+        self.message = text
+        self.message_timer = MenuScreen.MESSAGE_FRAMES
+
     def update(self):
         self.t += 1
+        if self.message_timer > 0:
+            self.message_timer -= 1
 
     def draw(self, surface):
         w, h = settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT
@@ -240,21 +291,82 @@ class MenuScreen:
                                        True, COL_MOON)
         surface.blit(tagline, tagline.get_rect(center=(cx, 242)))
 
-        # "Pressione ENTER" piscando
-        alpha = int(165 + 90 * math.sin(self.t * 0.05))
-        prompt = self.prompt_font.render("Pressione ENTER ou ESPAÇO para começar", True, COL_TEXT)
-        prompt.set_alpha(alpha)
-        prect = prompt.get_rect(center=(cx, 298))
-        surface.blit(prompt, prect)
-        for side in (-1, 1):
-            px = prect.left - 22 if side < 0 else prect.right + 22
-            pygame.draw.polygon(surface, COL_EMBER,
-                                [(px, 298 - 5), (px + 5, 298), (px, 298 + 5), (px - 5, 298)])
+        if self.saved is None:
+            # "Pressione ENTER" piscando
+            alpha = int(165 + 90 * math.sin(self.t * 0.05))
+            prompt = self.prompt_font.render("Pressione ENTER ou ESPAÇO para começar", True, COL_TEXT)
+            prompt.set_alpha(alpha)
+            prect = prompt.get_rect(center=(cx, 298))
+            surface.blit(prompt, prect)
+            for side in (-1, 1):
+                px = prect.left - 22 if side < 0 else prect.right + 22
+                pygame.draw.polygon(surface, COL_EMBER,
+                                    [(px, 298 - 5), (px + 5, 298), (px, 298 + 5), (px - 5, 298)])
+            controls_top = 338
+        else:
+            self._draw_options(surface, cx)
+            controls_top = 356
 
-        self._draw_controls(surface, cx)
+        self._draw_controls(surface, cx, controls_top)
+        if self.message_timer > 0:
+            msg = self.head_font.render(self.message, True, COL_CRIMSON)
+            msg.set_alpha(min(255, self.message_timer * 5))
+            surface.blit(msg, msg.get_rect(center=(cx, 266)))
+        if self.confirming_new:
+            self._draw_confirm(surface, cx)
 
-    def _draw_controls(self, surface, cx):
-        panel = pygame.Rect(cx - 410, 338, 820, 204)
+    def _draw_options(self, surface, cx):
+        """Lista "Continuar" / "Novo jogo" (só quando há partida salva)."""
+        pulse = 0.5 + 0.5 * math.sin(self.t * 0.1)
+        y = 286
+        for i, option in enumerate(MenuScreen.OPTIONS):
+            selected = i == self.selected_index and not self.confirming_new
+            label = self.prompt_font.render(option, True, COL_TEXT if selected else COL_MOON_DIM)
+            detail = None
+            if option == "Continuar":
+                s = self.saved
+                detail = self.desc_font.render(
+                    f"{s['region']}  ·  {s['coins']} moedas  ·  {s['minutes']} min", True, COL_MOON_DIM)
+            width = label.get_width() + (detail.get_width() + 18 if detail else 0)
+            left = cx - width // 2
+            row = label.get_rect(midleft=(left, y))
+            surface.blit(label, row)
+            if detail:
+                surface.blit(detail, detail.get_rect(midleft=(row.right + 18, y + 1)))
+            if selected:
+                mx, my = left - 22, y
+                color = (255, int(130 + 40 * pulse), 70)
+                pygame.draw.polygon(surface, color,
+                                    [(mx, my - 6), (mx + 6, my), (mx, my + 6), (mx - 6, my)])
+            y += 38
+
+    def _draw_confirm(self, surface, cx):
+        """Janela de confirmação: novo jogo substitui a partida salva."""
+        w, h = settings.SCREEN_WIDTH, settings.SCREEN_HEIGHT
+        dim = pygame.Surface((w, h), pygame.SRCALPHA)
+        dim.fill((3, 5, 16, 170))
+        surface.blit(dim, (0, 0))
+        panel = pygame.Rect(0, 0, 600, 210)
+        panel.center = (cx, h // 2)
+        draw_panel(surface, panel, alpha=255)
+        title = get_font(40, serif=True, bold=True).render("Substituir partida salva?", True, COL_TEXT)
+        surface.blit(title, title.get_rect(center=(cx, panel.y + 42)))
+        draw_divider(surface, cx, panel.y + 72, half_width=110)
+        body = self.desc_font.render("Um novo jogo apaga o progresso salvo. Isso não pode ser desfeito.",
+                                     True, COL_MOON_DIM)
+        surface.blit(body, body.get_rect(center=(cx, panel.y + 104)))
+        for i, option in enumerate(MenuScreen.CONFIRM_OPTIONS):
+            btn = pygame.Rect(0, 0, 200, 46)
+            btn.center = (cx + (-120 if i == 0 else 120), panel.y + 160)
+            selected = i == self.confirm_index
+            color = COL_CRIMSON if option == "Substituir" else COL_EMBER
+            if selected:
+                pygame.draw.rect(surface, color, btn, width=2, border_radius=8)
+            text = self.prompt_font.render(option, True, COL_TEXT if selected else COL_MOON_DIM)
+            surface.blit(text, text.get_rect(center=btn.center))
+
+    def _draw_controls(self, surface, cx, top=338):
+        panel = pygame.Rect(cx - 410, top, 820, 204)
         draw_panel(surface, panel, alpha=190)
 
         head = self.head_font.render("CONTROLES", True, COL_EMBER)

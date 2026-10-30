@@ -257,7 +257,7 @@ MUSIC_FILES = {
     "level": "background_padrao.mp3",
     "boss": "finalboss_music.wav",
 }
-MUSIC_VOLUME = 0.25              # volume da música (0.0 a 1.0); os efeitos usam MASTER_VOLUME
+MUSIC_VOLUME = 0.25             # volume da música (0.0 a 1.0); os efeitos usam MASTER_VOLUME
 MUSIC_FADE_MS = 800             # fade-in ao começar uma música
 # Loop sem "buraco": o silêncio no começo/fim do arquivo é cortado ao carregar
 # (o mp3 da fase tem ~0,5 s no início e ~1,3 s no fim, o que causava uma pausa
@@ -271,6 +271,11 @@ SHAKE_DECAY = 0.85
 
 # ---------- Save ----------
 SAVE_FILE = "savegame.json"
+SAVE_DIR_NAME = "VengeanceReborn"      # pasta de dados do jogo (ver core/save.py)
+AUTOSAVE_INTERVAL_SECONDS = 30         # intervalo do salvamento automático durante a partida
+AUTOSAVE_INTERVAL_FRAMES = AUTOSAVE_INTERVAL_SECONDS * FPS
+AUTOSAVE_AIR_GRACE_FRAMES = 5 * FPS    # espera até 5 s por um momento "no chão" para salvar
+SAVE_NOTICE_FRAMES = 100               # tempo do aviso "Progresso salvo" na tela
 
 # ---------- Estados do jogo ----------
 STATE_MENU = "menu"

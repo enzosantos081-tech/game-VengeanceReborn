@@ -405,6 +405,12 @@ class PlatformGroup:
             p.update()
         self._rects_cache = None   # a solidez (quebradiças) só muda aqui, dentro do update
 
+    def refresh(self):
+        """Descarta o cache de sólidos. Usado após restaurar um salvamento
+        (core/run_state.py), que altera o estado das plataformas fora do
+        update() normal."""
+        self._rects_cache = None
+
     def rects(self):
         """Retornados apenas os sólidos no momento (plataformas quebradiças
         já despencadas não bloqueiam o movimento). Com a Jornada de 30 telas

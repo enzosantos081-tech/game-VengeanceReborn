@@ -74,7 +74,7 @@ Com DEBUG **ligado**, aparecem:
   mais corações), com cor mudando de verde a vermelho conforme desce
 - Moedas coletáveis, vida máxima, pulo duplo, ímã de moedas e poção de cura
 - Morte → retorno ao Núcleo → mantém progresso → nova tentativa
-- Fase 1 expandida para 12.800px (8 regiões contínuas, com buracos, espinhos, plataformas, inimigos e checkpoints)
+- Fase 1 expandida para **30 telas / 30.720 px**: Floresta (15 telas) + Caverna (15 telas) em um mapa contínuo, com apenas **3 checkpoints** (meio da floresta, transição floresta → caverna e meio da caverna)
 - **Cenário de fundo elaborado** (`world/background.py`): a Fase 1
   inteira (Regiões 1 a 8) tem UMA identidade visual contínua — noite,
   lua grande com brilho suave, nuvens, duas camadas de montanhas em
@@ -100,7 +100,10 @@ Com DEBUG **ligado**, aparecem:
   Compras e equipamentos são salvos imediatamente. As antigas melhorias
   genéricas de dano, força de pulo, velocidade de ataque e carga extra de dash
   não estão mais disponíveis na loja.
-- Save/load simples em JSON (`core/save.py`) entre execuções
+- **Salvamento e continuação de partida** (`core/save.py`, `core/run_state.py`):
+  o jogo salva sozinho e o menu inicial oferece **Continuar** (volta à mesma
+  fase, posição, vida, moedas, melhorias, checkpoints, inimigos derrotados e
+  itens coletados). Detalhes na seção "Salvamento" abaixo.
 - Boss com **2 padrões de ataque**: "slam"/terremoto corpo a corpo
   (sempre, com uma zona de perigo pulsando no chão avisando onde vai
   bater) e uma **rajada de 5 projéteis rápidos em leque** exclusiva da
@@ -175,13 +178,47 @@ as mecânicas extras:
 VengeanceReborn/
 ├── main.py
 ├── config/settings.py       # todas as constantes de balanceamento
-├── core/                    # game loop, input, estados, save, debug overlay (F3)
+├── core/                    # game loop, input, estados, save (save.py) + estado da partida (run_state.py), debug overlay (F3)
 ├── player/                  # Kael: física, ataque, stats/progressão, sprite
 ├── enemies/                 # inimigo base, comum, à distância, voador, boss
 ├── world/                   # plataformas, obstáculos, moedas, checkpoints, level (fases), background (cenário)
 ├── systems/                 # colisão, combate, progressão, loja, respawn, áudio, partículas
-└── screens/                 # menu, HUD, game over, vitória, pausa, história
+├── screens/                 # menu, HUD, game over, vitória, pausa, história
+└── tests/                   # testes automatizados do sistema de salvamento
 ```
+
+### Salvamento
+
+- **Quando salva:** a cada 30 s de jogo (`AUTOSAVE_INTERVAL_SECONDS` em
+  `config/settings.py`, esperando Kael estar no chão), ao ativar um checkpoint,
+  ao comprar/aprimorar na loja, ao entrar na arena do Boss, ao pausar, ao sair
+  pelo menu de pausa, ao renascer depois de morrer e ao fechar a janela. Nunca
+  grava a cada quadro (um save leva ~1 ms).
+- **O que salva:** progressão permanente (`"stats"`: moedas, melhorias, espadas)
+  e estado da partida (`"run"`: fase/bioma, posição e vida, Núcleo/checkpoint
+  atual, checkpoints ativos, moedas coletadas, inimigos — posição, vida, vivo
+  ou morto e tempo para reaparecer —, plataformas móveis/quebradiças,
+  estalactites (inclui a ponte do puzzle da fenda), Boss e gatilhos de
+  história). O mapa em si não é salvo: as fases são geradas por código de forma
+  determinística e o save guarda só o que mudou, por índice.
+- **Onde fica:** `savegame.json` na pasta de dados do usuário —
+  Windows `%APPDATA%\VengeanceReborn`, macOS
+  `~/Library/Application Support/VengeanceReborn`, Linux
+  `~/.local/share/VengeanceReborn` (ao lado ficam `savegame.json.bak`, o último
+  save válido anterior). Um `savegame.json` antigo na pasta do projeto ainda é
+  lido (só a progressão).
+- **Segurança:** a gravação é atômica (arquivo temporário + `os.replace`) e o
+  backup `.bak` é usado se o principal estiver corrompido. Arquivo ausente,
+  truncado ou inválido nunca trava o jogo.
+- **Morte x fechar o jogo:** morrer segue as regras de sempre (volta ao último
+  Núcleo/checkpoint). Se o jogo for fechado na tela de derrota, o save já
+  guarda Kael no Núcleo, nunca no ponto da morte. Fechar em jogo retoma a
+  posição exata.
+- **Novo jogo:** com uma partida salva, pede confirmação ("Substituir partida
+  salva?", padrão Cancelar) antes de apagá-la. Vencer o Boss encerra a campanha
+  e limpa o save.
+- **Testes:** `python -m unittest tests.test_save_system -v` (headless, usa uma
+  pasta temporária, não toca no seu save).
 
 ### Estrutura do mapa
 
@@ -220,12 +257,29 @@ Praticamente todo número de gameplay (velocidade, dano, custo de
 melhorias, vida do Boss, etc.) está centralizado em
 `config/settings.py` — ajuste ali sem precisar mexer na lógica.
 
-## Visual do Boss (Vharok) - spritesheet
+## Fase 1: Floresta (15 telas) + Caverna (15 telas)
 
-- Assets: `assets/boss/vharok_spritesheet.png` (RGBA, fundo removido) e o original em JPG (`vharok_spritesheet_original.jpg`). `tools/process_vharok_sheet.py` refaz a conversão (precisa de Pillow + numpy; não é necessário para jogar).
-- Código: `enemies/boss_sprites.py` (recortes e animações explícitos, por linha/coluna da sheet) e `enemies/boss.py` (apenas métodos visuais; a lógica de combate não mudou).
-- Ajustes: `BOSS_SPRITE_SCALE` e demais `BOSS_*_TICKS` em `config/settings.py`. A hitbox (`BOSS_WIDTH/HEIGHT`) é independente do tamanho do sprite.
-- Se a sheet não existir, o Boss volta ao desenho retangular antigo.
+`build_main_level` (em `world/level.py`) monta a Jornada por **módulos** (classe `_JourneyBuilder`): trechos prontos de terreno, perigos, inimigos e moedas, encadeados da esquerda para a direita. Cada módulo começa e termina em chão na altura `GROUND_Y`, então qualquer ordem continua jogável.
+
+- **Tamanho**: `FOREST_SCREENS = 15` e `CAVE_SCREENS = 15` (1 tela = 1024 px) -> mapa de 30.720 px. O fundo em parallax faz o crossfade floresta -> caverna num intervalo de 1000 px centrado em x = 15.360.
+- **Checkpoints (só 3)**: x = 7.680 (meio da floresta), x = 15.360 (transição) e x = 23.040 (meio da caverna). Cada trecho entre checkpoints tem 7,5 telas. Para mudar, edite as chamadas `self.rest(...)` em `_JourneyBuilder.build()`. A loja só abre no início e nesses 3 checkpoints.
+- **Dificuldade**: a segunda metade de cada área usa as variantes `hard=True` (mais atiradores, morcegos e espinhos). O puzzle da fenda (estalactite-ponte) fica logo depois do checkpoint do meio da caverna.
+- **Desempenho**: inimigos a mais de `ENEMY_ACTIVE_RANGE` px de Kael não são atualizados, e os fora da tela (`ENEMY_DRAW_MARGIN`) não são desenhados; `PlatformGroup.rects()` guarda a lista de sólidos por frame.
+
+## Moedas e plataformas da caverna
+
+- **Valor**: cada moeda comum dá **5** de dinheiro (`COIN_VALUE`); as da área secreta dão 15 (`SECRET_COIN_VALUE`). Os custos da loja não foram alterados.
+- **Posicionamento das moedas**: em `world/level.py`, os ajudantes `_coins_centered`, `_coins_on(plataforma)` e `_coin_arc` calculam a posição a partir do topo do chão/plataforma, então a moeda nunca nasce dentro de plataformas nem no fundo de poços. Arcos sobre espinhos (`SPIKE_ARC_BASE`) ficam acima da cabeça: só se pega saltando.
+- **Plataformas da caverna** (geometrias herdadas da fase antiga, agora reaproveitadas nos módulos da caverna a partir de x = 15.360): escadas de passos de até 65 px de altura e vão de até 65 px (bem dentro do pulo simples, que cobre ~170 px nesse desnível), sempre cobrindo um espinho ou um vão; pontes centradas nos vãos; elevador centrado no vão de 9250-9380. Espinhos saíram do ponto de pouso dos vãos e inimigos que nasciam sobre espinhos ou sobre o vão foram para o chão firme.
+
+## Visual do Boss (Vharok) - Cavaleiro Sombrio
+
+- Fontes: as spritesheets em `assets/boss/source/` (soco, investida, rajada multidirecional, explosão no chão, smash, projétil de energia, efeitos e `pixel_walk_sheet.png`, a caminhada de 6 quadros em fundo preto, que a ferramenta transforma em transparente). Não são grades regulares e o cavaleiro tem escala levemente diferente em cada folha.
+- `tools/process_knight_sheets.py` recorta cada quadro (componentes conectados + cortes explícitos onde quadros se tocam), iguala as escalas e grava um PNG por quadro em `assets/boss/knight/` + `manifest.json` com a âncora dos pés. Precisa de Pillow, numpy e scipy; **não é necessário para jogar**.
+- Código: `enemies/boss_sprites.py` (carrega os quadros, tabelas de animação, mapa de quadros no topo do arquivo) e `enemies/boss.py` (a animação apenas acompanha a máquina de estados).
+- Ataques: slam = smash + erupção de fogo; golpe curto = soco poderoso; investida = body charge; explosão multidirecional = leque de 360° de estilhaços (um mira em Kael); **orbe de energia** (novo) = esfera arremessada com Kael longe.
+- Ajustes: `BOSS_SPRITE_SCALE`, `BOSS_WALK_FRAME_TICKS*`, `BOSS_ORB_*`, `BOSS_BARRAGE_*` etc. em `config/settings.py`. `BOSS_ORB_IN_PHASE1 = False` deixa o orbe só na Fase 2. A hitbox (`BOSS_WIDTH/HEIGHT`) é independente do tamanho do sprite.
+- Se os quadros não existirem, o Boss volta ao desenho retangular.
 
 ## Visual do Morcego Sombrio (FlyingEnemy) - spritesheet
 

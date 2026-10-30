@@ -264,6 +264,10 @@ class BasicEnemy(Enemy):
             # Conta o avanço REAL (parede/colisão não conta como progresso).
             self.attack_advanced += abs(self.rect.x - x_before)
 
+        # Encostar no corpo do inimigo também machuca (não dá para atravessá-lo
+        # sem dano). Os i-frames do jogador evitam dano repetido a cada frame.
+        self.check_contact_damage(player)
+
     def draw(self, surface, camera_x):
         if not self.alive:
             return
@@ -411,6 +415,9 @@ class RangedEnemy(Enemy):
             self.cooldown = settings.RANGED_ENEMY_COOLDOWN
 
         self._update_projectiles(level, player)
+
+        # Dano por contato: não dá para atravessar o corpo do inimigo à distância.
+        self.check_contact_damage(player)
 
     # ---------- Mira e linha de visão ----------
     def _player_in_range(self, player):
