@@ -73,8 +73,8 @@ class InputManager:
 
     def attack_pressed(self):
         """Ataque agora é feito com o clique esquerdo do mouse. A mira
-        (lado do golpe) é calculada em Player.handle_input a partir da
-        posição do cursor, sem alterar a direção que o personagem olha."""
+        (lado do golpe) vem da direção em que o personagem está virado
+        (Player.facing_right), não da posição do cursor."""
         return 1 in self._mouse_pressed_this_frame
 
     def mouse_world_x(self, camera_x):

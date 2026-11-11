@@ -199,7 +199,7 @@ class MenuScreen:
     CONTROLS_LEFT = [
         (["A", "D"], "Mover (ou setas)"),
         (["ESPAÇO"], "Pular (2x no ar: pulo duplo)"),
-        (["MOUSE 1"], "Atacar na direção do mouse"),
+        (["MOUSE 1"], "Atacar (direção que Kael olha)"),
     ]
     CONTROLS_RIGHT = [
         (["Q"], "Dash"),

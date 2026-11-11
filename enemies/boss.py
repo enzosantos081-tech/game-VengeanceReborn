@@ -69,6 +69,7 @@ class Boss(Enemy):
         # O Boss é único e derrotá-lo é a condição de vitória - ele nunca
         # deve reaparecer sozinho como os inimigos comuns.
         self.can_respawn = False
+        self.can_be_knocked_back = False   # Boss não é empurrado pelos golpes de Kael
         self.arena_left = arena_left
         self.arena_right = arena_right
         self.state = Boss.STATE_CHASE
@@ -276,6 +277,16 @@ class Boss(Enemy):
         self.melee_timer = 0
         self.vel_x = 0
         self.charge_travelled = 0
+
+    def restore_full_health(self):
+        """Kael morreu e renasceu: o Boss volta com a vida cheia e na Fase 1
+        (a Fase 2 só começa de novo quando a vida cair até o limite)."""
+        self.health = self.max_health
+        self.phase2 = False
+        self.phase_flash_timer = 0
+        self._hud_phase_transition_timer = 0
+        self._hud_hit_flash_timer = 0
+        self._hud_trail_health = float(self.max_health)
 
     def _can_charge(self, player):
         """A investida só é sorteada com Kael vivo e longe o bastante, fora do

@@ -53,6 +53,21 @@ class FlyingEnemy(Enemy):
         self._flap_tick = 0
         self._flap_ticks = max(1, int(getattr(settings, "FLYING_ENEMY_FLAP_TICKS", 8)))
 
+    def on_knockback(self):
+        # Um acerto cancela a investida/preparação e o morcego se recupera.
+        if self._charge_state in ("windup", "charge"):
+            self._charge_state = "recovery"
+            self._charge_timer = int(getattr(settings, "FLYING_ENEMY_CHARGE_RECOVERY_FRAMES", 35))
+            self._charge_cooldown = int(getattr(settings, "FLYING_ENEMY_CHARGE_COOLDOWN_FRAMES", 100))
+
+    def _apply_knockback_move(self, level):
+        dx = round(self.consume_knockback())
+        if dx == 0:
+            return
+        moved = self.rect.move(dx, 0)
+        if not level.rect_hits_solid(moved):
+            self.rect = moved
+
     def update(self, level, player):
         super().update(level, player)
         if not self.alive:
@@ -117,6 +132,7 @@ class FlyingEnemy(Enemy):
                 self.direction = 1 if self.rect.centerx < self.home_x else -1
                 self.facing_right = self.direction > 0
 
+        self._apply_knockback_move(level)
         self.check_contact_damage(player)
 
     def respawn(self):

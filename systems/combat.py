@@ -27,6 +27,9 @@ def resolve_player_attack(player, enemies, particles=None):
             continue
         if hitbox.colliderect(enemy.rect):
             enemy.take_damage(player.stats.attack_damage)
+            # Empurra para o lado em que Kael golpeou (Boss/sentinelas são imunes).
+            if enemy.alive:
+                enemy.apply_knockback(1 if player.attack_facing_right else -1)
             player.attack.register_hit(enemy.id)
             hit_ids.append(enemy.id)
             if particles:

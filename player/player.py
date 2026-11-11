@@ -24,10 +24,8 @@ class Player:
         self.vel_y = 0
         self.facing_right = True
 
-        # Direção usada apenas para a hitbox do ataque (definida pela
-        # posição do mouse no momento do golpe). Independente de
-        # facing_right, que continua representando para onde o
-        # personagem está olhando/andando.
+        # Direção da hitbox do ataque, travada no momento do golpe com
+        # base em facing_right (para onde o personagem está virado).
         self.attack_facing_right = True
 
         self.on_ground = False
@@ -114,14 +112,11 @@ class Player:
             self.jump_buffer_timer = settings.JUMP_BUFFER_FRAMES
 
         if input_manager.attack_pressed():
-            # Mira do ataque: qual lado do personagem o cursor está.
-            # facing_right (a direção que o personagem olha/anda) NÃO
-            # é alterado por isso - só a hitbox do golpe muda de lado.
-            mouse_world_x = input_manager.mouse_world_x(camera_x)
-            aim_right = mouse_world_x >= self.rect.centerx
+            # O golpe sai para o lado em que Kael está virado (última direção
+            # A/D pressionada), o mesmo lado do sprite.
             started = self.attack.try_start(cooldown=self.stats.attack_cooldown)
             if started:
-                self.attack_facing_right = aim_right
+                self.attack_facing_right = self.facing_right
             self.just_attacked = started
 
         if input_manager.dash_pressed():

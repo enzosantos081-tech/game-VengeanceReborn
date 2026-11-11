@@ -65,6 +65,16 @@ class Spike:
             direction = 1 if player.rect.centerx > self.rect.centerx else -1
             player.take_damage(settings.SPIKE_DAMAGE, knockback_dir=direction)
 
+    def check_enemy_damage(self, enemy):
+        """Machuca inimigos terrestres que tocam os espinhos (1 toque a
+        cada SPIKE_ENEMY_COOLDOWN_FRAMES) e os empurra para fora."""
+        if self.rect.colliderect(enemy.rect):
+            enemy.take_damage(settings.SPIKE_ENEMY_DAMAGE)
+            enemy.spike_cooldown = settings.SPIKE_ENEMY_COOLDOWN_FRAMES
+            if enemy.alive:
+                direction = 1 if enemy.rect.centerx > self.rect.centerx else -1
+                enemy.apply_knockback(direction)
+
     def _draw_sprite(self, surface, r):
         if self.facing == "up":
             if _load("spike") is None:
@@ -374,6 +384,18 @@ class ObstacleGroup:
         """Retângulos sólidos das estalactites que já pousaram."""
         return [rect for st in self.stalactites
                 if (rect := st.platform_rect()) is not None]
+
+    def damage_enemy(self, enemy):
+        """Aplica o dano dos espinhos a um inimigo (chamado por Level.update)."""
+        if not (enemy.alive and enemy.takes_spike_damage):
+            return
+        if enemy.spike_cooldown > 0:
+            enemy.spike_cooldown -= 1
+            return
+        for s in self.spikes:
+            s.check_enemy_damage(enemy)
+            if enemy.spike_cooldown > 0:
+                break
 
     def update(self, player, ground_y=None, solids=None):
         for s in self.spikes:

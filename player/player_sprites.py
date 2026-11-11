@@ -47,6 +47,55 @@ FOOT_PAD = 4
 # para manter o pixel art sem distorção; a escala usa vizinho mais próximo.
 SPRITE_SCALE = 1.0
 
+
+# Remove o halo branco/bege de 1-2 px que veio "queimado" na spritesheet.
+# Só mexe em pixels da borda externa (encostados em transparência).
+# Se você já substituiu o PNG por uma versão limpa, pode deixar True
+# (não faz mal) ou colocar False para pular a limpeza no carregamento.
+REMOVE_WHITE_HALO = True
+
+
+def _remove_white_halo(sheet):
+    w, h = sheet.get_size()
+    data = pygame.image.tobytes(sheet, "RGBA")
+    alpha = data[3::4]
+    opaque = {i for i, a in enumerate(alpha) if a == 255}
+    if not opaque:
+        return
+
+    def rgb(i):
+        o = i * 4
+        return data[o], data[o + 1], data[o + 2]
+
+    def is_white(c):                      # camada 1: quase branco
+        return min(c) >= 220
+
+    def is_beige(c):                      # camada 2: claro e pouco saturado
+        return sum(c) / 3 >= 135 and (max(c) - min(c)) <= 40
+
+    def on_edge(i):
+        x, y = i % w, i // w
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and (ny * w + nx) not in opaque:
+                    return True
+        return False
+
+    white = [i for i in opaque if is_white(rgb(i))]
+    beige = [i for i in opaque if is_beige(rgb(i))]
+    removed = set()
+    for candidates, passes in ((white, 4), (beige, 1)):
+        for _ in range(passes):
+            to_clear = [i for i in candidates if i in opaque and on_edge(i)]
+            if not to_clear:
+                break
+            for i in to_clear:
+                opaque.discard(i)
+                removed.add(i)
+    for i in removed:
+        sheet.set_at((i % w, i // w), (0, 0, 0, 0))
+
 # Nome da animação -> (linha da sheet, colunas dos quadros, duração em
 # frames de jogo por imagem, repete?). Animações com repete=False
 # ficam paradas no último quadro até o estado mudar.
@@ -70,6 +119,8 @@ def _load_all():
         return _cache
     # A spritesheet é carregada uma única vez (lazy, no primeiro uso).
     sheet = pygame.image.load(_SHEET_PATH).convert_alpha()
+    if REMOVE_WHITE_HALO:
+        _remove_white_halo(sheet)
     _cache = {}
     for anim_name, (row, cols, duration, loop) in _ANIMATION_DEFS.items():
         frames = []

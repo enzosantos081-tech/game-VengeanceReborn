@@ -38,6 +38,15 @@ class Enemy:
         self.can_respawn = True
         self.respawn_timer = 0
 
+        # Empurrão ao ser atingido por Kael (ver apply_knockback). O Boss e
+        # inimigos fixos na parede desativam isso com can_be_knocked_back=False.
+        self.can_be_knocked_back = True
+        self.knockback_vx = 0.0
+
+        # Espinhos (world/obstacles.py): só inimigos terrestres ligam isso.
+        self.takes_spike_damage = False
+        self.spike_cooldown = 0
+
     def take_damage(self, amount):
         if not self.alive:
             return
@@ -49,6 +58,33 @@ class Enemy:
             if self.can_respawn:
                 self.respawn_timer = settings.ENEMY_RESPAWN_FRAMES
 
+    def apply_knockback(self, direction, speed=None):
+        """Empurra o inimigo horizontalmente (direction: 1 direita, -1
+        esquerda). Ignorado se can_be_knocked_back for False ou se morto.
+        Cada subclasse soma consume_knockback() ao seu movimento."""
+        if not self.can_be_knocked_back or not self.alive:
+            return False
+        if speed is None:
+            speed = settings.ENEMY_KNOCKBACK_SPEED
+        self.knockback_vx = speed * (1 if direction >= 0 else -1)
+        self.on_knockback()
+        return True
+
+    def on_knockback(self):
+        """Gancho para subclasses interromperem o que estavam fazendo
+        (ataque, investida...) ao serem empurradas."""
+
+    def consume_knockback(self):
+        """Retorna o deslocamento horizontal do empurrão neste frame e
+        aplica o decaimento. Retorna 0.0 quando não há empurrão."""
+        if self.knockback_vx == 0:
+            return 0.0
+        vx = self.knockback_vx
+        self.knockback_vx *= settings.ENEMY_KNOCKBACK_DECAY
+        if abs(self.knockback_vx) < 0.5:
+            self.knockback_vx = 0.0
+        return vx
+
     def respawn(self):
         """Reaparece no ponto de spawn original, com a vida cheia. Chamado
         automaticamente por update() quando respawn_timer chega a zero.
@@ -59,6 +95,8 @@ class Enemy:
         self.health = self.max_health
         self.alive = True
         self.hit_flash_timer = 0
+        self.knockback_vx = 0.0
+        self.spike_cooldown = 0
         self.vel_x = 0
         self.vel_y = 0
 

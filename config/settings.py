@@ -25,6 +25,10 @@ COLOR_BOSS = (120, 20, 30)
 COLOR_COIN = (255, 210, 60)
 COLOR_SPIKE = (200, 200, 210)
 SPIKE_DAMAGE = 12
+# Dano dos espinhos em inimigos terrestres (Boss, morcegos e sentinelas são imunes).
+# Vida dos inimigos é pequena (4-5), então 1 por toque; o cooldown evita dano a cada frame.
+SPIKE_ENEMY_DAMAGE = 1
+SPIKE_ENEMY_COOLDOWN_FRAMES = 30
 COLOR_TEXT = (240, 240, 245)
 COLOR_TEXT_SHADOW = (10, 10, 15)
 COLOR_HP_BG = (50, 20, 20)
@@ -59,6 +63,12 @@ PLAYER_ATTACK_RANGE = 40
 PLAYER_ATTACK_HEIGHT = 30
 KNOCKBACK_X = 6
 KNOCKBACK_Y = -6
+
+# Empurrão aplicado aos inimigos (exceto Boss) quando Kael os acerta.
+# Velocidade inicial em px/frame; a cada frame é multiplicada pelo decaimento.
+# Distância total ~ velocidade / (1 - decaimento): 6.5 / 0.18 = ~36 px.
+ENEMY_KNOCKBACK_SPEED = 6.5
+ENEMY_KNOCKBACK_DECAY = 0.82
 
 # ---------- Dash (tecla Q) ----------
 # Velocidade em pixels por segundo; duração e recarga usam milissegundos.
@@ -204,7 +214,7 @@ BOSS_CHARGE_FRAME_TICKS = 3           # frames de jogo por quadro da animação 
 BOSS_MELEE_TRIGGER_DISTANCE = 90      # distância HORIZONTAL entre centros para ativar o golpe (px)
 BOSS_MELEE_REACH = 30                 # alcance da hitbox À FRENTE da borda do corpo (px); bem menor que o slam (130 a partir do centro)
 BOSS_MELEE_TOP_MARGIN = 12            # px do topo do corpo (coroa) ignorados na checagem de altura e na hitbox
-BOSS_MELEE_WINDUP_FRAMES = 16         # aviso (braços erguidos + zona de perigo); Kael ainda se afasta/usa dash a tempo
+BOSS_MELEE_WINDUP_FRAMES = 30         # aviso/delay antes do soco (braços erguidos + zona de perigo); era 16 (~0,27 s), agora ~0,5 s
 BOSS_MELEE_ACTIVE_FRAMES = 8          # janela em que a hitbox existe (dano no máximo UMA vez por golpe)
 BOSS_MELEE_RECOVER_FRAMES = 24        # recuperação após o golpe, antes de voltar à perseguição
 BOSS_MELEE_COOLDOWN = 100             # intervalo MÍNIMO entre golpes (~1,7 s), contado a partir do fim do anterior
@@ -285,3 +295,11 @@ STATE_SHOP = "shop"
 STATE_GAME_OVER = "game_over"
 STATE_VICTORY = "victory"
 STATE_BOSS_INTRO = "boss_intro"
+
+# ---------- Cutscene de entrada no castelo (vídeo) ----------
+# Toca uma vez, ao entrar na arena do Boss vindo da fase 1. Coloque o vídeo em
+# assets/cutscenes/boss_intro.mp4. Se o arquivo não existir, o jogo ignora a cutscene.
+BOSS_INTRO_ENABLED = True
+BOSS_INTRO_VIDEO = "boss_intro.mp4"      # dentro de assets/cutscenes/
+BOSS_INTRO_SKIPPABLE = True              # ENTER / ESPAÇO / ESC pulam
+BOSS_INTRO_VOLUME = 1.0                  # 0.0 a 1.0

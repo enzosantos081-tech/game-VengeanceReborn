@@ -149,6 +149,7 @@ class Level:
             if abs(enemy.rect.centerx - player.rect.centerx) > ENEMY_ACTIVE_RANGE:
                 continue
             enemy.update(self, player)
+            self.obstacles.damage_enemy(enemy)
         self.enemies = [e for e in self.enemies if True]  # mantidos p/ desenhar corpo caído; sem despawn
         self.obstacles.update(player, ground_y=GROUND_Y, solids=self.platforms.rects())
         coins_collected = self.coins.update(player, particles)

@@ -8,6 +8,7 @@ a fase atual (world/level.py), a loja (systems/shop.py), o respawn
 de Game diretamente, o que mantém o acoplamento baixo.
 """
 
+import os
 import random
 import sys
 import pygame
@@ -33,6 +34,7 @@ from screens.game_over import GameOverScreen
 from screens.victory import VictoryScreen
 from screens.story import StoryPopup
 from screens.pause import PauseMenu
+from screens.cutscene import VideoCutscene
 
 
 class Game:
@@ -58,6 +60,7 @@ class Game:
         self.victory_screen = VictoryScreen()
         self.shop = Shop()
         self.pause_menu = PauseMenu()
+        self.boss_intro = None   # VideoCutscene em andamento (STATE_BOSS_INTRO)
         self.particles = ParticleSystem()
         self.story = StoryPopup()
 
@@ -216,9 +219,42 @@ class Game:
         self.camera_x = 0
         self.particles = ParticleSystem()
         self._prev_on_ground = False
+        self.save_run("boss")
+        # Cutscene em vídeo antes da luta; sem vídeo, a luta começa direto.
+        if not self._start_boss_intro():
+            self._begin_boss_fight()
+
+    def _start_boss_intro(self):
+        """Pausa o jogo e toca o vídeo. Devolve False se não houver cutscene."""
+        if not settings.BOSS_INTRO_ENABLED:
+            return False
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "assets", "cutscenes", settings.BOSS_INTRO_VIDEO)
+        cutscene = VideoCutscene(path)
+        # Silencia música/efeitos ANTES de iniciar (o áudio do vídeo começa em start()).
+        self.music.stop()
+        self.audio.stop_all()
+        if not cutscene.start():
+            return False
+        self.boss_intro = cutscene
+        self.states.change(settings.STATE_BOSS_INTRO)
+        return True
+
+    def _update_boss_intro(self):
+        skip = settings.BOSS_INTRO_SKIPPABLE and (self.input.confirm_pressed()
+                                                  or self.input.pause_pressed())
+        if self.boss_intro is None or self.boss_intro.update(skip):
+            if self.boss_intro is not None:
+                self.boss_intro.stop()
+                self.boss_intro = None
+            self._begin_boss_fight()
+
+    def _begin_boss_fight(self):
+        """Fim da cutscene (ou sem cutscene): o jogo despausa e a luta começa."""
         self.audio.play("boss_enter")
         self.music.play("boss")
-        self.save_run("boss")
+        self._prev_health = self.player.health
+        self.states.change(settings.STATE_PLAYING)
 
     def restart_attempt(self):
         """Usado pelo menu de pausa: volta ao último ponto do Núcleo/
@@ -231,9 +267,11 @@ class Game:
         self.save_run("restart")
 
     def _reset_boss_attacks(self):
-        """Kael renasceu: projéteis e golpes do Boss em andamento não continuam."""
+        """Kael renasceu: projéteis e golpes do Boss em andamento não continuam
+        e o Boss recupera a vida máxima (e volta à Fase 1)."""
         if self.level.boss and self.level.boss.alive:
             self.level.boss.reset_combat_state()
+            self.level.boss.restore_full_health()
 
     def return_to_menu(self):
         """Volta ao menu SEM apagar o salvamento (quem quiser encerrar a
@@ -288,6 +326,9 @@ class Game:
 
         elif state == settings.STATE_SHOP:
             self._update_shop()
+
+        elif state == settings.STATE_BOSS_INTRO:
+            self._update_boss_intro()
 
         elif state == settings.STATE_PAUSED:
             self._update_pause()
@@ -613,6 +654,10 @@ class Game:
                     pygame.mouse.get_pos(),
                     shake_offset=(offset_x, offset_y),
                 )
+
+        elif state == settings.STATE_BOSS_INTRO:
+            if self.boss_intro is not None:
+                self.boss_intro.draw(self.screen)
 
         elif state == settings.STATE_GAME_OVER:
             self.game_over_screen.draw(self.screen, self.player)

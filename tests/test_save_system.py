@@ -333,7 +333,9 @@ class TestMortePausaEEventos(SaveTestCase):
 
     def test_vitoria_encerra_a_campanha_e_limpa_o_save(self):
         g = self.new_game()
-        g.enter_boss_level()
+        # Sem cutscene: o teste quer a luta começando direto.
+        with mock.patch.object(settings, "BOSS_INTRO_ENABLED", False):
+            g.enter_boss_level()
         g.level.boss.take_damage(10 ** 7)
         self.frames(2)
         self.assertEqual(g.states.current, settings.STATE_VICTORY)

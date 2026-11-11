@@ -25,6 +25,7 @@ class WallSentinel(Enemy):
             coin_value=settings.ENEMY_COIN_DROP_SENTINEL,
         )
         self.facing_dir = facing_dir
+        self.can_be_knocked_back = False   # embutida na parede
         self.facing_right = facing_dir > 0
         # Começa com meio cooldown, pra não atirar assim que a tela carrega.
         self.cooldown = settings.WALL_SENTINEL_COOLDOWN // 2

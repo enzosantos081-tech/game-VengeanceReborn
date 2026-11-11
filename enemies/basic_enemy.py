@@ -71,6 +71,7 @@ class BasicEnemy(Enemy):
         self.attack_advanced = 0   # px já avançados no golpe atual
         self.alerted = False
         self._was_alive = True
+        self.takes_spike_damage = True
 
     def respawn(self):
         super().respawn()
@@ -84,6 +85,14 @@ class BasicEnemy(Enemy):
         self.attack_advanced = 0
         self.alerted = False
         self._was_alive = True
+
+    def on_knockback(self):
+        # Levar um golpe interrompe o ataque em preparação (vai para a recuperação).
+        if self.combat_state == self.ATTACK:
+            self.combat_state = self.RECOVERY
+            self.recovery_timer = settings.BASIC_ENEMY_ATTACK_COOLDOWN
+            self.attack_timer = 0
+            self.attack_advanced = 0
 
     def _start_attack(self, player):
         self.combat_state = self.ATTACK
@@ -259,7 +268,7 @@ class BasicEnemy(Enemy):
         if self.vel_y > settings.MAX_FALL_SPEED:
             self.vel_y = settings.MAX_FALL_SPEED
         x_before = self.rect.x
-        level.move_and_collide_enemy(self, self.vel_x, self.vel_y)
+        level.move_and_collide_enemy(self, self.vel_x + self.consume_knockback(), self.vel_y)
         if self.combat_state == self.ATTACK:
             # Conta o avanço REAL (parede/colisão não conta como progresso).
             self.attack_advanced += abs(self.rect.x - x_before)
@@ -359,6 +368,7 @@ class RangedEnemy(Enemy):
         self.cast_timer = 0
         self.pending_shot_dir = 0
         self.shot_released = False
+        self.takes_spike_damage = True
 
     def respawn(self):
         super().respawn()
@@ -380,7 +390,7 @@ class RangedEnemy(Enemy):
         if self.vel_y > settings.MAX_FALL_SPEED:
             self.vel_y = settings.MAX_FALL_SPEED
         # Mantém a rotina de colisão original: o ranged enemy não caminha no chão.
-        level.move_and_collide_enemy(self, 0, self.vel_y)
+        level.move_and_collide_enemy(self, self.consume_knockback(), self.vel_y)
 
         distance = player.rect.centerx - self.rect.centerx
         if player.alive:
