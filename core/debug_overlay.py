@@ -90,8 +90,8 @@ class DebugOverlay:
                 self._draw_rect(surf, camera_x, coin.rect, COLOR_TRIGGER)
         for cp in level.checkpoints:
             self._draw_rect(surf, camera_x, cp.rect, COLOR_TRIGGER)
-        if level.shop_zone:
-            self._draw_rect(surf, camera_x, level.shop_zone.rect, COLOR_TRIGGER)
+        for shop in level.shops:
+            self._draw_rect(surf, camera_x, shop.rect, COLOR_TRIGGER)
         if level.boss_trigger:
             self._draw_rect(surf, camera_x, level.boss_trigger, COLOR_TRIGGER)
 

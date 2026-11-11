@@ -4,7 +4,8 @@ Checkpoints intermediários espalhados pela Fase 1. Quando Kael toca um
 checkpoint pela primeira vez, ele é ativado e passa a ser o novo ponto
 de retorno do Núcleo (systems/respawn.py), evitando que o jogador tenha
 que percorrer toda a fase novamente a cada morte - uma extensão natural
-da mecânica descrita na seção 15 do documento.
+da mecânica descrita na seção 15 do documento. O checkpoint SÓ salva o
+progresso: a loja fica numa barraca logo depois dele (world/shops.py).
 """
 
 import math
@@ -53,19 +54,6 @@ class Checkpoint:
             self.active = True
             return True
         return False
-
-    def player_in_shop_range(self, player):
-        """Todo checkpoint já ativado também funciona como acesso à loja,
-        não só a zona fixa da Região 1 - assim o jogador não precisa
-        voltar lá toda vez que quiser gastar moedas. A zona é um pouco
-        maior que o poste em si, pra não exigir sobreposição exata."""
-        if not self.active:
-            return False
-        zone = self.rect.inflate(
-            settings.CHECKPOINT_SHOP_RANGE_PADDING_X * 2,
-            settings.CHECKPOINT_SHOP_RANGE_PADDING_Y * 2,
-        )
-        return zone.colliderect(player.rect)
 
     def respawn_point(self):
         return (self.rect.centerx - settings.PLAYER_WIDTH // 2, self.rect.bottom - settings.PLAYER_HEIGHT)

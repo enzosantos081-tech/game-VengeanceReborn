@@ -99,11 +99,9 @@ class Game:
 
     # ---------- Loja ----------
     def _near_shop(self):
-        """True se o jogador pode abrir a loja agora: perto da zona fixa
-        da Região 1 OU perto de qualquer checkpoint já ativado."""
-        if self.level.shop_zone and self.level.shop_zone.player_in_range(self.player):
-            return True
-        return any(cp.player_in_shop_range(self.player) for cp in self.level.checkpoints)
+        """True se o jogador está na zona de interação de uma barraca de
+        loja. Checkpoints NÃO abrem a loja: só salvam o progresso."""
+        return any(shop.player_in_range(self.player) for shop in self.level.shops)
 
     def _update_shake(self):
         if self.shake_timer > 0:
@@ -489,9 +487,8 @@ class Game:
             self.story.show(story_text)
             self.audio.play("story")
 
-        # Loja: zona fixa da Região 1 OU qualquer checkpoint já ativado
-        # (assim o jogador não precisa voltar à área inicial toda vez
-        # que quiser gastar moedas em melhorias).
+        # Loja: apenas nas barracas (a inicial e a que fica logo após cada
+        # checkpoint). O próprio checkpoint não permite compras.
         if self._near_shop():
             if self.input.interact_pressed():
                 self.audio.play("shop_open")

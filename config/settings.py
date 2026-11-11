@@ -99,9 +99,15 @@ ENEMY_COIN_DROP_BOSS = 100
 ENEMY_RESPAWN_SECONDS = 60
 ENEMY_RESPAWN_FRAMES = ENEMY_RESPAWN_SECONDS * FPS
 
-# ---------- Checkpoint/loja ----------
-CHECKPOINT_SHOP_RANGE_PADDING_X = 70
-CHECKPOINT_SHOP_RANGE_PADDING_Y = 40
+# ---------- Loja (barraca) ----------
+# Os checkpoints só salvam; a compra acontece apenas na barraca (world/shops.py).
+SHOP_VISUAL_HEIGHT = 112     # altura da sprite em px (largura segue a proporção original)
+SHOP_FALLBACK_WIDTH = 200    # usado só se a sprite não carregar
+SHOP_FOOT_OFFSET = 6         # px: base de pedra um pouco abaixo do topo do chão
+SHOP_INTERACT_WIDTH = 150    # zona de interação (balcão)
+SHOP_INTERACT_HEIGHT = 90
+SHOP_AFTER_CHECKPOINT = 175  # distância (px) entre o checkpoint e o centro da loja
+SHOP_REST_TAIL = 330         # chão garantido após o checkpoint (a loja cabe inteira)
 
 # ---------- Morcego Sombrio (novo mob voador) ----------
 FLYING_ENEMY_WIDTH = 30

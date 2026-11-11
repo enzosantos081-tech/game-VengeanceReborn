@@ -22,7 +22,7 @@ from enemies.basic_enemy import BasicEnemy, RangedEnemy
 from enemies.flying_enemy import FlyingEnemy
 from enemies.boss import Boss
 from systems import collision
-from systems.shop import ShopZone
+from world.shops import ShopStall
 from world.background import VillageBackdrop, CastleBackdrop, MundoBackdrop, SegmentedWorldBackdrop, BossArenaBackdrop
 
 GROUND_Y = settings.SCREEN_HEIGHT - 64
@@ -39,7 +39,7 @@ class Level:
         self.enemies = []
         self.core_pos = (64, GROUND_Y - settings.PLAYER_HEIGHT)
         self.player_start = self.core_pos
-        self.shop_zone = None
+        self.shops = []   # barracas de loja (world/shops.py): inicial + uma após cada checkpoint
         self.boss_trigger = None
         self.boss = None
         self.background_decor = []
@@ -202,17 +202,10 @@ class Level:
         self.obstacles.draw(surface, camera_x)
         self.coins.draw(surface, camera_x)
 
-        # Núcleo do Retorno (visual)
-        core_rect = pygame.Rect(self.core_pos[0] - 10, self.core_pos[1] - 10,
-                                 settings.PLAYER_WIDTH + 20, settings.PLAYER_HEIGHT + 20)
-        cr = core_rect.move(-camera_x, 0)
-        if -50 < cr.x < settings.SCREEN_WIDTH:
-            pygame.draw.ellipse(surface, settings.COLOR_CORE, cr, width=3)
-
-        if self.shop_zone:
-            sr = self.shop_zone.rect.move(-camera_x, 0)
-            if -50 < sr.x < settings.SCREEN_WIDTH:
-                pygame.draw.rect(surface, (255, 210, 60), sr, width=2, border_radius=6)
+        # Barracas de loja (sprite). O ponto de respawn (Núcleo) é só lógica:
+        # não há mais marcador visual (círculo azul) no cenário.
+        for shop in self.shops:
+            shop.draw(surface, camera_x)
 
         for cp in self.checkpoints:
             cp.draw(surface, camera_x)
@@ -360,14 +353,17 @@ class _JourneyBuilder:
     def rest(self, x, end_x, cp_x):
         """Chão reto com um checkpoint em cp_x. Inimigos só longe do checkpoint."""
         assert x <= cp_x - 200 and cp_x + 200 <= end_x, (x, cp_x, end_x)
+        # Garante chão suficiente para a loja logo depois do checkpoint.
+        end_x = max(end_x, cp_x + settings.SHOP_REST_TAIL)
         self.ground(x, end_x - x)
         p = x + 250
         while p <= cp_x - 320:
             self.basic(p)
             p += 380
         _coins_centered(self.level, cp_x - 150, 2)
-        _coins_centered(self.level, cp_x + 150, 2)
+        _coins_centered(self.level, cp_x + 300, 2)     # depois da loja
         self.checkpoint(cp_x)
+        self.level.shops.append(ShopStall(cp_x + settings.SHOP_AFTER_CHECKPOINT, GROUND_Y))   # Checkpoint -> Loja
         self.no_stalactite.append((cp_x - 280, cp_x + 280))
         return end_x
 
@@ -684,8 +680,8 @@ class _JourneyBuilder:
         self.ground(0, 900)
         level.core_pos = (80, GROUND_Y - settings.PLAYER_HEIGHT)
         level.player_start = level.core_pos
-        level.shop_zone = ShopZone(300, GROUND_Y - 80, 120, 80)
-        _coins_centered(level, 520, 3)          # logo depois da loja (que termina em x=420)
+        level.shops.append(ShopStall(360, GROUND_Y))   # loja da área inicial (sem checkpoint)
+        _coins_centered(level, 520, 3)          # logo depois da loja (que termina perto de x=460)
         self.story(150, "Kael reconstruiu o Nucleo do Retorno. Sua jornada de vinganca comeca aqui.")
         self.story(850, "A antiga estrada leva a floresta que outrora protegia sua vila.")
 
